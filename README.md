@@ -72,3 +72,5 @@ Wendel - Desenvolvedor FullStack
 ## Licença
 
 A licença do projeto ainda não foi definida.
+<!-- npm init -y -->
+<!-- npm install express pg dotenv -->
