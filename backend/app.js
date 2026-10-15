@@ -1,6 +1,7 @@
 require('dotenv').config();
 
 const express = require('express');
+const path = require('path');
 
 const estudanteRoutes = require('./src/routes/estudanteRoutes');
 const responsavelRoutes = require('./src/routes/responsavelRoutes');
@@ -18,12 +19,16 @@ app.get('/', (req, res) => {
 });
 
 app.use('/auth', authRoutes);
-
 app.use('/estudantes', estudanteRoutes);
-
 app.use('/responsaveis', responsavelRoutes);
-
 app.use('/solicitacoes', solicitacaoRoutes);
+
+// Frontend
+app.use(
+    express.static(
+        path.join(__dirname, '../frontend')
+    )
+);
 
 const PORT = process.env.PORT || 3000;
 

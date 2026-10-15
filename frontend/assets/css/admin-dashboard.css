@@ -1,0 +1,95 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+
+    font-family: Arial, sans-serif;
+
+    background: #f4f4f4;
+}
+
+header {
+    background: #198754;
+
+    color: white;
+
+    padding: 20px 40px;
+
+    display: flex;
+
+    justify-content: space-between;
+
+    align-items: center;
+}
+
+header h1 {
+    margin: 0;
+}
+
+header p {
+    margin: 5px 0 0;
+}
+
+header button {
+    padding: 10px 20px;
+
+    cursor: pointer;
+
+    border: none;
+
+    border-radius: 5px;
+}
+
+main {
+    max-width: 1000px;
+
+    margin: 40px auto;
+
+    padding: 0 20px;
+}
+
+.solicitacao {
+    background: white;
+
+    margin-bottom: 20px;
+
+    padding: 20px;
+
+    border-radius: 8px;
+
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.solicitacao p {
+    margin: 8px 0;
+}
+
+.acoes {
+    margin-top: 15px;
+
+    display: flex;
+
+    gap: 10px;
+}
+
+.aprovar {
+    background: #198754;
+}
+
+.reprovar {
+    background: #dc3545;
+}
+
+.acoes button {
+    padding: 10px 15px;
+
+    border: none;
+
+    border-radius: 5px;
+
+    color: white;
+
+    cursor: pointer;
+}
