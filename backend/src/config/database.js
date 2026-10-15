@@ -9,5 +9,5 @@ const pool = new Pool({
     password: process.env.PGPASSWORD,
     database: process.env.PGDATABASE
 });
-
+ 
 module.exports = pool;

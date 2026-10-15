@@ -5,6 +5,7 @@ const express = require('express');
 const estudanteRoutes = require('./src/routes/estudanteRoutes');
 const responsavelRoutes = require('./src/routes/responsavelRoutes');
 const solicitacaoRoutes = require('./src/routes/solicitacaoRoutes');
+const authRoutes = require('./src/routes/authRoutes');
 
 const app = express();
 
@@ -15,6 +16,8 @@ app.get('/', (req, res) => {
         mensagem: 'API do SISGECE funcionando'
     });
 });
+
+app.use('/auth', authRoutes);
 
 app.use('/estudantes', estudanteRoutes);
 
