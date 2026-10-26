@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 
 const express = require('express');
 const path = require('path');
@@ -12,7 +12,7 @@ const app = express();
 
 app.use(express.json());
 
-app.get('/', (req, res) => {
+app.get('/api/health', (req, res) => {
     res.json({
         mensagem: 'API do SISGECE funcionando'
     });

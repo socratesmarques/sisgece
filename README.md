@@ -1,76 +1,54 @@
 # SISGECE
 
-Sistema de Gestão de Solicitações Escolares do IFCE — Campus Maranguape.
+Sistema de gerenciamento de entrada, saída e solicitações escolares do IFCE — Campus Maranguape.
 
-O SISGECE é um projeto voltado à digitalização das solicitações escolares relacionadas à saída antecipada durante as aulas e à entrada com fardamento incompleto ou alterado. A proposta é centralizar o envio, a análise e o acompanhamento dessas solicitações em um único sistema.
+Repositório consolidado: https://github.com/socratesmarques/sisgece
 
-> **Status do projeto:** desenvolvimento inicial.
+## Origem
 
-## Objetivos
+Este repositório reúne os históricos completos de `socratesmarques/sisgece` (API Node.js/PostgreSQL e telas administrativas) e `Gabriel-msv/sisgece` (interface de solicitações, gestão e recepção/portaria). A união foi feita por merge, sem reescrever os commits originais. As branches de trabalho das origens continuam nos respectivos repositórios.
 
-- Organizar as solicitações encaminhadas à coordenação.
-- Registrar as justificativas apresentadas pelos alunos.
-- Facilitar o acompanhamento do andamento de cada solicitação.
-- Manter um histórico das solicitações e de suas decisões.
+## Executar
 
-## Funcionalidades
+Requer Node.js 20 ou superior e npm.
 
-### Planejadas
-
-- Envio de solicitações com justificativa obrigatória.
-- Solicitação de autorização para saída antecipada da aula.
-- Solicitação de autorização para entrada com fardamento incompleto ou alterado.
-- Consulta ao status das solicitações.
-- Histórico de solicitações.
-- Análise e decisão das solicitações pela coordenação.
-
-## Tecnologias
-
-- **Front-end:** HTML, CSS e JavaScript
-- **Back-end:** Node.js
-- **Banco de dados:** SQL
-
-A arquitetura e a integração entre os componentes serão ajustadas conforme a implementação do projeto.
-
-## Estrutura do repositório
-
-Estrutura inicial do sistema:
-
-```text
-SISGECE/
-├── frontend/
-│   ├── assets/
-│   │   ├── css/
-│   │   ├── js/
-│   │   └── img/
-│   ├── pages/
-│   └── index.html
-├── backend/
-│   ├── src/
-│   │   ├── routes/
-│   │   ├── controllers/
-│   │   ├── services/
-│   │   └── models/
-│   └── app.js
-├── database/
-│   └── README.md
-├── docs/
-├── .gitignore
-└── README.md
+```sh
+npm ci --prefix backend
+cp backend/.env.example backend/.env
+npm start --prefix backend
 ```
 
-A estrutura pode ser adaptada à medida que as necessidades técnicas forem definidas.
+Acesse http://localhost:3000 para a interface principal e http://localhost:3000/pages/admin-login.html para o painel administrativo conectado à API. O diagnóstico da API está em `/api/health`.
+
+Para usar a API com banco, configure PostgreSQL e `JWT_SECRET` em `backend/.env`. O esquema SQL e as migrações não foram fornecidos nos repositórios originais; é necessário disponibilizar as tabelas esperadas pelos controllers: `administradores`, `estudantes`, `responsaveis`, `responsavel_estudante` e `solicitacoes`. O servidor e a demonstração podem iniciar sem banco; as rotas que consultam PostgreSQL dependem dele.
+
+## Estado da integração
+
+A interface principal mantém o modo de demonstração original (`CONFIG.USE_MOCK = true` em `frontend/assets/js/app.js`), com dados no navegador. As contas exibidas nela são exclusivas da demonstração. Os pedidos dessa interface ainda não são enviados ao PostgreSQL.
+
+O painel em `/pages/admin-login.html` usa o backend real, com autenticação JWT e análise de solicitações. Os contratos das duas versões são diferentes: a interface principal espera `/api`, sessão por cookie e perfis de gestão, recepção e portaria; a API existente usa `/auth`, `/estudantes`, `/responsaveis` e `/solicitacoes`, com token Bearer e administrador. Alterar somente `USE_MOCK` não basta para conectá-las. A adaptação desses contratos e a persistência das etapas de recepção/portaria são trabalho futuro.
+
+## Estrutura
+
+```text
+frontend/
+  index.html              Interface principal (demonstração)
+  assets/css/             Estilos das duas interfaces
+  assets/js/              Scripts das duas interfaces
+  pages/                  Login e painel administrativo da API
+backend/
+  app.js                  Servidor Express e arquivos estáticos
+  scripts/                Utilitários administrativos
+  src/                    Configuração, controllers, rotas e autenticação
+index.html                Entrada para hospedagem estática (GitHub Pages)
+```
+
+Para demonstração estática, sirva a raiz do repositório; `index.html` encaminha para `frontend/`. O painel administrativo requer o servidor Node.js.
 
 ## Equipe
 
-Mario - TECH LEADER
-Gilvan - Desenvolvedor FullStack
-Miguel - Desenvolvedor FullStack
-Socrates - Desenvolvedor FullStack
-Wendel - Desenvolvedor FullStack
+Mario — Tech Leader; Gilvan, Miguel, Socrates e Wendel — Desenvolvimento FullStack. A autoria original está preservada nos commits dos dois projetos.
 
 ## Licença
 
-A licença do projeto ainda não foi definida.
-<!-- npm init -y -->
-<!-- npm install express pg dotenv -->
+A licença geral do projeto ainda não foi definida.

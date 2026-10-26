@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self'">
+    <title>SISGECE | Gestão de Entrada e Saída</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/app.css">
+</head>
+
+<body>
+    <header class="topbar">
+        <div class="topbar-inner">
+            <a class="brand" href="#" data-view="home">
+                <div class="logo-placeholder"><i
+                        class="bi bi-grid-3x3-gap-fill"></i><span><b>IFCE</b><small>Maranguape</small></span></div><i
+                    class="brand-divider"></i><span class="brand-copy"><b>SISGECE</b><small>Sistema de Gerenciamento de
+                        Entrada e Saída de Estudantes</small></span><span class="campus">CAMPUS MARANGUAPE</span>
+            </a>
+            <button id="menuToggle" class="menu-toggle"><i class="bi bi-list"></i></button>
+            <nav id="nav"><button data-view="home" class="nav-link active"><i class="bi bi-house-fill"></i>
+                    Início</button><button data-view="request" class="nav-link"><i class="bi bi-file-earmark-plus"></i>
+                    Solicitação</button><button data-view="management" class="nav-link"><i
+                        class="bi bi-clipboard-check"></i> Gestão</button><button data-view="gate" class="nav-link"><i
+                        class="bi bi-shield-check"></i> Recepção / Portaria</button><button data-view="about"
+                    class="nav-link"><i class="bi bi-info-circle"></i> Sobre</button></nav>
+            <div id="account"></div>
+        </div>
+    </header>
+    <main class="container app">
+        <div id="notice" role="status"></div>
+        <section class="view active" id="home">
+            <div class="hero panel">
+                <div><span class="eyebrow">PAINEL OPERACIONAL</span>
+                    <h1>Entrada e saída com <em>segurança e organização.</em></h1>
+                    <p>Centralize solicitações, autorizações e conferências de saída em um único lugar, com
+                        rastreabilidade em cada etapa.</p>
+                    <div class="hero-buttons"><button class="btn btn-green" data-view="request"><i
+                                class="bi bi-plus-circle"></i> Fazer solicitação</button><button
+                            class="btn btn-outline-green" data-view="management"><i class="bi bi-person-lock"></i>
+                            Acessar área restrita</button></div><small class="safe"><i
+                            class="bi bi-check-circle-fill"></i> Autorização e dupla checagem na saída</small>
+                </div>
+                <div class="hero-art">
+                    <div class="shield"><i class="bi bi-shield-check"></i></div>
+                    <div class="float-tag tag-a"><i
+                            class="bi bi-file-earmark-check"></i><span><b>Solicitação</b><small>Registro
+                                digital</small></span></div>
+                    <div class="float-tag tag-b"><i class="bi bi-check2-all"></i><span><b>Dupla
+                                checagem</b><small>Recepção + portaria</small></span></div>
+                </div>
+            </div>
+            <div class="stats">
+                <article><i class="bi bi-file-earmark-text"></i><span>Solicitações registradas<b id="total">0</b></span>
+                </article>
+                <article><i class="bi bi-hourglass-split"></i><span>Aguardando análise<b id="pending">0</b></span>
+                </article>
+                <article><i class="bi bi-door-open"></i><span>Autorizadas<b id="approved">0</b></span></article>
+                <article><i class="bi bi-check2-all"></i><span>Saídas concluídas<b id="done">0</b></span></article>
+            </div>
+            <div class="section-head"><span class="eyebrow">COMECE POR AQUI</span>
+                <h2>O que você precisa fazer?</h2>
+                <p>Escolha o serviço correspondente ao seu perfil.</p>
+            </div>
+            <div class="action-grid"><button class="action-card featured" data-view="request"><i
+                        class="bi bi-file-earmark-plus-fill"></i><span><small>ALUNOS E RESPONSÁVEIS</small><b>Nova
+                            solicitação</b>
+                        <p>Preencha seus dados e informe o motivo da saída.</p>
+                    </span><i class="bi bi-arrow-up-right arrow"></i></button><button class="action-card"
+                    data-view="management"><i class="bi bi-clipboard2-check-fill"></i><span><small>COORDENAÇÃO /
+                            ENSINO</small><b>Análise de solicitação</b>
+                        <p>Revise pedidos e registre deferimentos ou indeferimentos.</p>
+                    </span><i class="bi bi-chevron-right arrow"></i></button><button class="action-card"
+                    data-view="gate"><i class="bi bi-person-badge-fill"></i><span><small>CONTROLE DE
+                            ACESSO</small><b>Recepção / Portaria</b>
+                        <p>Confirme a saída em duas etapas, com horário registrado.</p>
+                    </span><i class="bi bi-chevron-right arrow"></i></button></div>
+            <div class="workflow"><b><i class="bi bi-diagram-3"></i> Fluxo de saída</b><span>01 · Solicitação</span><i
+                    class="bi bi-arrow-right"></i><span>02 · Autorização</span><i class="bi bi-arrow-right"></i><span>03
+                    · Recepção</span><i class="bi bi-arrow-right"></i><span>04 · Portaria</span></div>
+        </section>
+
+        <section class="view" id="request">
+            <div class="page-head">
+                <div><span class="eyebrow">FORMULÁRIO DIGITAL</span>
+                    <h1>Nova solicitação de saída</h1>
+                    <p>Preencha os dados abaixo. Campos com * são obrigatórios.</p>
+                </div><i class="bi bi-file-earmark-plus head-icon"></i>
+            </div>
+            <div class="form-layout">
+                <form id="requestForm" class="panel form-panel">
+                    <div class="panel-title"><i class="bi bi-person-lines-fill"></i><span><b>Quem está
+                                solicitando?</b><small>Escolha o perfil para mostrar os campos adequados.</small></span>
+                    </div>
+                    <div class="radio-cards"><label class="radio-card selected"><input type="radio" name="type"
+                                value="aluno" checked><i class="bi bi-mortarboard-fill"></i><span><b>Aluno</b><small>Sou
+                                    o estudante</small></span><i
+                                class="bi bi-check-circle-fill check"></i></label><label class="radio-card"><input
+                                type="radio" name="type" value="responsavel"><i
+                                class="bi bi-people-fill"></i><span><b>Responsável</b><small>Sou responsável
+                                    legal</small></span><i class="bi bi-check-circle-fill check"></i></label></div>
+                    <div id="studentFields" class="fields">
+                        <div class="field full"><label>Nome completo do aluno *</label><input name="studentName"
+                                required placeholder="Digite seu nome completo"></div>
+                        <div class="field"><label>Matrícula *</label><input name="enrollment" required
+                                placeholder="Ex.: 202512340001"></div>
+                        <div class="field"><label>Curso / turma</label><input name="course"
+                                placeholder="Ex.: Informática — 2º ano"></div>
+                        <div class="field full"><label>Nome do responsável / filiação *</label><input
+                                name="guardianName" required placeholder="Pai, mãe ou responsável"></div>
+                        <div class="field"><label>Contato do responsável *</label><input name="guardianPhone" type="tel"
+                                required placeholder="(85) 99999-9999"></div>
+                        <div class="field"><label>Tipo de saída *</label><select name="exitType" required>
+                                <option value="">Selecione...</option>
+                                <option>Saída antecipada</option>
+                                <option>Saída em horário regular</option>
+                                <option>Atividade externa</option>
+                                <option>Entrada fora do horário</option>
+                                <option>Acesso fora do turno</option>
+                                <option>Outro</option>
+                            </select></div>
+                    </div>
+                    <div id="guardianFields" class="fields hidden">
+                        <div class="field full"><label>Nome completo do responsável *</label><input name="requesterName"
+                                placeholder="Digite seu nome completo"></div>
+                        <div class="field"><label>CPF do responsável *</label><input name="cpf" inputmode="numeric"
+                                maxlength="14" placeholder="000.000.000-00"></div>
+                        <div class="field"><label>Telefone para contato *</label><input name="phone" type="tel"
+                                placeholder="(85) 99999-9999"></div>
+                        <div class="field full"><label>Nome completo do aluno *</label><input name="studentNameGuardian"
+                                placeholder="Nome do estudante"></div>
+                        <div class="field"><label>Matrícula do aluno</label><input name="enrollmentGuardian"
+                                placeholder="Matrícula, se souber"></div>
+                        <div class="field"><label>Grau de parentesco *</label><select name="kinship">
+                                <option value="">Selecione...</option>
+                                <option>Pai</option>
+                                <option>Mãe</option>
+                                <option>Avô / Avó</option>
+                                <option>Tio / Tia</option>
+                                <option>Irmão / Irmã</option>
+                                <option>Responsável legal</option>
+                                <option>Outro</option>
+                            </select></div>
+                        <div class="field"><label>Tipo de saída *</label><select name="exitTypeGuardian">
+                                <option value="">Selecione...</option>
+                                <option>Saída antecipada</option>
+                                <option>Saída em horário regular</option>
+                                <option>Atividade externa</option>
+                                <option>Entrada fora do horário</option>
+                                <option>Acesso fora do turno</option>
+                                <option>Outro</option>
+                            </select></div>
+                    </div>
+                    <div class="fields schedule">
+                        <div class="field"><label>Data prevista da saída *</label><input type="date" name="date"
+                                id="exitDate" required></div>
+                        <div class="field"><label>Horário previsto *</label><input type="time" name="time" required>
+                        </div>
+                        <div class="field full"><label>Justificativa da saída *</label><textarea name="justification"
+                                id="justification" rows="4" required minlength="8" maxlength="800"
+                                placeholder="Explique o motivo da solicitação..."></textarea><small class="count"
+                                id="count">0 / 800</small></div>
+                    </div>
+                    <label class="consent"><input type="checkbox" id="truth" required> Confirmo que as informações
+                        fornecidas são verdadeiras.</label>
+                    <div class="form-actions"><button type="reset" class="btn btn-light">Limpar
+                            formulário</button><button type="submit" class="btn btn-green"><i
+                                class="bi bi-send-fill"></i> Enviar solicitação</button></div>
+                </form>
+                <aside class="side">
+                    <div class="panel info"><i class="bi bi-info-circle-fill"></i>
+                        <h3>Antes de enviar</h3>
+                        <ul>
+                            <li>Confira seus dados de identificação.</li>
+                            <li>A solicitação precisa ser autorizada pela gestão.</li>
+                            <li>A saída só termina após a confirmação da recepção e da portaria.</li>
+                        </ul>
+                    </div>
+                    <div class="privacy"><i class="bi bi-shield-lock-fill"></i><span><b>Dados protegidos</b><small>Esta
+                                versão é demonstrativa. Integre autenticação e armazenamento seguro no backend antes de
+                                usar dados reais.</small></span></div>
+                </aside>
+            </div>
+        </section>
+
+        <section class="view" id="management">
+            <div class="page-head">
+                <div><span class="eyebrow">ÁREA RESTRITA</span>
+                    <h1>Análise de solicitações</h1>
+                    <p>Painel da coordenação e dos usuários autorizados.</p>
+                </div><i class="bi bi-clipboard-check head-icon"></i>
+            </div>
+            <div id="managementLogin" class="login-layout">
+                <form class="panel login-panel" id="loginManagement"><i class="bi bi-person-lock login-icon"></i>
+                    <h2>Entrar no painel de gestão</h2>
+                    <p>Use sua matrícula ou CPF/usuário e senha.</p><label>Identificação<input name="identity" required
+                            autocomplete="username" placeholder="Matrícula, CPF ou usuário"></label><label>Senha<span
+                            class="password"><input name="password" type="password" required
+                                autocomplete="current-password"><button type="button" class="showpass"><i
+                                    class="bi bi-eye"></i></button></span></label><button
+                        class="btn btn-green full-btn">Entrar <i class="bi bi-arrow-right"></i></button>
+                    <p class="error" id="managementError"></p>
+                </form>
+                <div class="login-side"><span class="eyebrow">ACESSO PROTEGIDO</span>
+                    <h2>Gestão responsável e rastreável.</h2>
+                    <p>Revise as solicitações e registre decisões com histórico.</p>
+                    <div class="credential demo-only"><b>Conta de demonstração · Coordenação (superusuário)</b><code>Usuário: root</code><code>Senha: toor</code><small>Remova este bloco e troque a autenticação ao integrar o backend.</small></div>
+                </div>
+            </div>
+            <div id="managementDashboard" class="hidden">
+                <div class="dashboard-top"><span><b id="managementName"></b><small
+                            id="managementRole"></small></span><button class="btn btn-light" id="logoutManagement">Sair
+                        <i class="bi bi-box-arrow-right"></i></button></div>
+                <div id="managementStats" class="mini-stats"></div>
+                <div class="panel data-panel">
+                    <div class="data-head"><span><b>Solicitações recebidas</b><small>Revise os dados e registre a
+                                decisão.</small></span>
+                        <div class="filters"><input id="managementSearch" placeholder="Buscar nome ou protocolo"><select
+                                id="managementFilter">
+                                <option value="all">Todos os status</option>
+                                <option value="pending">Aguardando análise</option>
+                                <option value="approved">Autorizadas</option>
+                                <option value="rejected">Indeferidas</option>
+                                <option value="done">Concluídas</option>
+                            </select></div>
+                    </div>
+                    <div id="managementList" class="request-list"></div>
+                </div>
+                <div id="adminPanel" class="panel data-panel hidden">
+                    <div class="data-head"><span><b>Usuários do sistema</b><small>Área exclusiva do
+                                superusuário.</small></span><button id="addUser" class="btn btn-green"> <i
+                                class="bi bi-person-plus"></i> Adicionar usuário</button></div>
+                    <div id="usersList"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="view" id="gate">
+            <div class="page-head">
+                <div><span class="eyebrow">CONTROLE DE SAÍDA</span>
+                    <h1>Recepção e portaria</h1>
+                    <p>Confirmação em duas etapas para registrar a saída com segurança.</p>
+                </div><i class="bi bi-shield-check head-icon"></i>
+            </div>
+            <div id="gateLogin" class="login-layout">
+                <form class="panel login-panel" id="loginGate"><i class="bi bi-door-open login-icon"></i>
+                    <h2>Acesso ao controle de saída</h2>
+                    <p>Entre com uma conta de recepção ou portaria.</p><label>Identificação<input name="identity"
+                            required autocomplete="username"
+                            placeholder="Matrícula, CPF ou usuário"></label><label>Senha<span class="password"><input
+                                name="password" type="password" required autocomplete="current-password"><button
+                                type="button" class="showpass"><i class="bi bi-eye"></i></button></span></label><button
+                        class="btn btn-green full-btn">Entrar no controle <i class="bi bi-arrow-right"></i></button>
+                    <p class="error" id="gateError"></p>
+                </form>
+                <div class="login-side"><span class="eyebrow">DUPLA CHECAGEM</span>
+                    <h2>Duas confirmações. Um registro confiável.</h2>
+                    <div class="gate-explain"><b>1</b><span><strong>Recepção</strong><small>Confirma a apresentação e
+                                registra o horário.</small></span></div>
+                    <div class="gate-explain"><b>2</b><span><strong>Portaria</strong><small>Confirma que o aluno
+                                efetivamente deixou o campus.</small></span></div>
+                    <div class="credential demo-only"><b>Contas de demonstração</b><code>Portaria: sudo / odus</code><code>Recepção: recepcao / Recepcao@123</code></div>
+                </div>
+            </div>
+            <div id="gateDashboard" class="hidden">
+                <div class="dashboard-top"><span><b id="gateName"></b><small id="gateRole"></small></span><button
+                        class="btn btn-light" id="logoutGate">Sair <i class="bi bi-box-arrow-right"></i></button></div>
+                <div id="gateBanner" class="gate-banner"></div>
+                <div class="panel data-panel">
+                    <div class="data-head"><span><b>Saídas autorizadas</b><small>Somente solicitações deferidas aparecem
+                                aqui.</small></span>
+                        <div class="filters"><input id="gateSearch" placeholder="Buscar aluno ou protocolo"><select
+                                id="gateFilter">
+                                <option value="active">Pendentes de conferência</option>
+                                <option value="all">Todas as autorizadas</option>
+                                <option value="reception">Aguardando recepção</option>
+                                <option value="gate">Aguardando portaria</option>
+                                <option value="done">Saídas concluídas</option>
+                            </select></div>
+                    </div>
+                    <div id="gateList" class="request-list"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="view" id="about">
+            <div class="page-head">
+                <div><span class="eyebrow">SOBRE O SISTEMA</span>
+                    <h1>Mais organização para o campus.</h1>
+                    <p>Uma proposta digital para solicitações e controle de saída de estudantes.</p>
+                </div><i class="bi bi-info-circle head-icon"></i>
+            </div>
+            <div class="about-grid">
+                <article class="panel"><i class="bi bi-file-earmark-check"></i>
+                    <h3>Solicitação digital</h3>
+                    <p>Alunos e responsáveis informam os dados necessários, o motivo e recebem um protocolo.</p>
+                </article>
+                <article class="panel"><i class="bi bi-person-check"></i>
+                    <h3>Análise de gestão</h3>
+                    <p>Usuários autorizados revisam as informações e registram deferimento ou indeferimento.</p>
+                </article>
+                <article class="panel"><i class="bi bi-shield-check"></i>
+                    <h3>Dupla checagem</h3>
+                    <p>Recepção e portaria confirmam etapas diferentes, com usuário e horário registrados.</p>
+                </article>
+            </div>
+            <div class="panel integration">
+                <h3><i class="bi bi-code-slash"></i> Pronto para integração</h3>
+                <p>O frontend usa dados demonstrativos salvos no navegador. Para produção, conecte à API e ao banco de
+                    dados, valide tudo no servidor, aplique autenticação real e registre trilha de auditoria.</p>
+                <div class="tags"><span>HTML</span><span>CSS responsivo</span><span>JavaScript</span><span>Fluxo de
+                        status</span><span>LocalStorage demonstrativo</span></div>
+            </div>
+        </section>
+        <footer><b>SISGECE</b><span>Campus Maranguape · Protótipo de interface</span><span><i
+                    class="bi bi-shield-lock"></i> Controle demonstrativo</span></footer>
+    </main>
+
+    <div id="modalBackdrop" class="modal-backdrop hidden">
+        <section class="modal-box" role="dialog" aria-modal="true">
+            <div class="modal-head"><span><small id="modalEyebrow">SISGECE</small>
+                    <h2 id="modalTitle">Detalhes</h2>
+                </span><button id="closeModal"><i class="bi bi-x-lg"></i></button></div>
+            <div id="modalBody"></div>
+            <div id="modalFooter" class="modal-footer"></div>
+        </section>
+    </div>
+    <script src="assets/js/app.js"></script>
+</body>
+
+</html>
