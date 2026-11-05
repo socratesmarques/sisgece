@@ -1,0 +1,49 @@
+name: Docker smoke test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar ambiente de teste
+        run: |
+          cat > backend/.env <<'EOF'
+          PORT=3000
+          PGHOST=localhost
+          PGPORT=5432
+          PGUSER=postgres
+          PGPASSWORD=senha-apenas-para-testes-ci
+          PGDATABASE=sisgece
+          JWT_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          EOF
+
+      - name: Validar Compose e iniciar serviços
+        run: |
+          docker compose --env-file backend/.env config -q
+          docker compose --env-file backend/.env up -d --build --wait
+
+      - name: Testar API, banco e login de administrador
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error http://localhost:8004/api/health
+          curl --fail --silent --show-error http://localhost:8004/api/ready
+          docker compose --env-file backend/.env exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT COUNT(*) FROM solicitacoes;"'
+          docker compose --env-file backend/.env exec -T -e ADMIN_EMAIL=admin@exemplo.com -e ADMIN_PASSWORD=senha-forte-de-teste-123 app node scripts/criarAdmin.js
+          curl --fail --silent --show-error -H 'Content-Type: application/json' -d '{"email":"admin@exemplo.com","senha":"senha-forte-de-teste-123"}' http://localhost:8004/auth/login | grep -q '"token"'
+
+      - name: Exibir logs em caso de falha
+        if: failure()
+        run: docker compose --env-file backend/.env logs --no-color || true
+
+      - name: Limpar ambiente descartável de CI
+        if: always()
+        run: docker compose --env-file backend/.env down --volumes --remove-orphans || true

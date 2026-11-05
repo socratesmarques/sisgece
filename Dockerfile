@@ -1,20 +1,18 @@
 FROM node:22-bookworm-slim
 
-WORKDIR /app
-
-COPY backend/package*.json ./backend/
+ENV NODE_ENV=production
 
 WORKDIR /app/backend
 
-RUN npm ci --omit=dev
+# Instala dependências antes do código para aproveitar o cache de build.
+COPY backend/package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
-WORKDIR /app
+COPY backend/ ./
+COPY frontend/ /app/frontend/
 
-COPY backend ./backend
-COPY frontend ./frontend
-
-WORKDIR /app/backend
+# O servidor não precisa executar como root.
+USER node
 
 EXPOSE 3000
-
-CMD ["npm", "start"]
+CMD ["node", "app.js"]
