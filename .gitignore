@@ -41,3 +41,7 @@ backend/*.sqlite-journal
 *.sublime-workspace
 .env.*
 !.env.example
+
+# --- BACKUPS LOCAIS / DADOS SENSIVEIS ---
+sisgece-backup*.sql
+backups/

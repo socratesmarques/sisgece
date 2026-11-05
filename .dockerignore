@@ -1,7 +1,10 @@
 .git
+.github
 .gitignore
-node_modules
 **/node_modules
-backend/.env
-npm-debug.log
+**/.env
+**/.env.local
+**/.env.production
+**/npm-debug.log*
+**/coverage
 .DS_Store
