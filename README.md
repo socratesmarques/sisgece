@@ -187,7 +187,7 @@ frontend/                     Interface de demonstração e painel admin
 
 ## Equipe
 
-Mario — Tech Leader; Gilvan, Miguel, Miguel, Socrates e Wendel — Desenvolvimento FullStack. O histórico original foi preservado no repositório consolidado.
+Mario — Tech Leader; Gilvan, Miguel, Socrates e Wendel — Desenvolvimento FullStack. O histórico original foi preservado no repositório consolidado.
 
 ## Licença
 
