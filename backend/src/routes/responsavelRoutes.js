@@ -5,6 +5,7 @@ const {
 } = require('../controllers/responsavelController');
 
 const router = express.Router();
+router.use(require('../middlewares/authMiddleware'));
 
 router.get('/:cpf', buscarPorCpf);
 

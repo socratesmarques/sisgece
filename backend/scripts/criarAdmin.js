@@ -8,8 +8,8 @@ async function criarAdmin() {
     const email = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
     const senha = process.env.ADMIN_PASSWORD || '';
 
-    if (!nome || !email || !email.includes('@') || senha.length < 12) {
-        console.error('Informe ADMIN_EMAIL válido e ADMIN_PASSWORD com pelo menos 12 caracteres.');
+    if (!nome || !email || !email.includes('@') || senha.length < 12 || Buffer.byteLength(senha) > 72) {
+        console.error('Informe ADMIN_EMAIL válido e ADMIN_PASSWORD com pelo menos 12 caracteres e no máximo 72 bytes.');
         process.exitCode = 1;
         await pool.end();
         return;

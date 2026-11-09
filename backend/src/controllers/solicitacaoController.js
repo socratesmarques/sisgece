@@ -17,6 +17,16 @@ async function criarSolicitacao(req, res) {
             });
         }
 
+        const estudante = await pool.query('SELECT id FROM estudantes WHERE id = $1', [estudante_id]);
+        if (!estudante.rows.length) return res.status(404).json({ erro: 'Estudante não encontrado' });
+        if (responsavel_id) {
+            const vinculo = await pool.query(
+                'SELECT 1 FROM responsavel_estudante WHERE estudante_id = $1 AND responsavel_id = $2',
+                [estudante_id, responsavel_id]
+            );
+            if (!vinculo.rows.length) return res.status(400).json({ erro: 'Responsável não vinculado ao estudante' });
+        }
+
         const resultado = await pool.query(
             `
             INSERT INTO solicitacoes (
@@ -46,7 +56,7 @@ async function criarSolicitacao(req, res) {
         });
 
     } catch (erro) {
-        console.error(erro);
+        console.error('Falha em solicitação:', erro.code || 'interno');
 
         res.status(500).json({
             erro: 'Erro ao criar solicitação'
@@ -65,6 +75,8 @@ async function listarSolicitacoes(req, res) {
                 s.horario_solicitado,
                 s.status,
                 s.criado_em,
+                s.administrador_id,
+                s.observacao_coordenacao,
 
                 e.id AS estudante_id,
                 e.nome AS estudante_nome,
@@ -81,13 +93,13 @@ async function listarSolicitacoes(req, res) {
             LEFT JOIN responsaveis r
                 ON r.id = s.responsavel_id
 
-            ORDER BY s.criado_em DESC
+            ORDER BY s.criado_em DESC LIMIT 500
         `);
 
         res.json(resultado.rows);
 
     } catch (erro) {
-        console.error(erro);
+        console.error('Falha em solicitação:', erro.code || 'interno');
 
         res.status(500).json({
             erro: 'Erro ao listar solicitações'
@@ -106,6 +118,8 @@ async function listarPendentes(req, res) {
                 s.horario_solicitado,
                 s.status,
                 s.criado_em,
+                s.administrador_id,
+                s.observacao_coordenacao,
 
                 e.nome AS estudante_nome,
                 e.matricula,
@@ -122,13 +136,13 @@ async function listarPendentes(req, res) {
 
             WHERE s.status = 'PENDENTE'
 
-            ORDER BY s.criado_em ASC
+            ORDER BY s.criado_em ASC LIMIT 500
         `);
 
         res.json(resultado.rows);
 
     } catch (erro) {
-        console.error(erro);
+        console.error('Falha em solicitação:', erro.code || 'interno');
 
         res.status(500).json({
             erro: 'Erro ao listar solicitações pendentes'
@@ -177,7 +191,7 @@ async function aprovarSolicitacao(req, res) {
         });
 
     } catch (erro) {
-        console.error(erro);
+        console.error('Falha em solicitação:', erro.code || 'interno');
 
         res.status(500).json({
             erro: 'Erro ao aprovar solicitação'
@@ -226,7 +240,7 @@ async function reprovarSolicitacao(req, res) {
         });
 
     } catch (erro) {
-        console.error(erro);
+        console.error('Falha em solicitação:', erro.code || 'interno');
 
         res.status(500).json({
             erro: 'Erro ao reprovar solicitação'

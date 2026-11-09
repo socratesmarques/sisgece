@@ -10,31 +10,31 @@ const {
     reprovarSolicitacao
 } = require('../controllers/solicitacaoController');
 
+const { validarCriacao, validarDecisao } = require('../middlewares/validation');
 const router = express.Router();
+router.use(autenticar);
 
-router.post('/', criarSolicitacao);
+router.post('/', validarCriacao, criarSolicitacao);
 
 router.get(
     '/',
-    autenticar,
     listarSolicitacoes
 );
 
 router.get(
     '/pendentes',
-    autenticar,
     listarPendentes
 );
 
 router.patch(
     '/:id/aprovar',
-    autenticar,
+    validarDecisao,
     aprovarSolicitacao
 );
 
 router.patch(
     '/:id/reprovar',
-    autenticar,
+    validarDecisao,
     reprovarSolicitacao
 );
 

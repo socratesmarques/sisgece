@@ -1,4 +1,4 @@
-name: Docker smoke test
+name: Production checks
 
 on:
   pull_request:
@@ -9,41 +9,62 @@ permissions:
   contents: read
 
 jobs:
-  docker:
+  production:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-
-      - name: Configurar ambiente de teste
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Instalar dependências, testar segurança e auditar produção
         run: |
-          cat > backend/.env <<'EOF'
+          npm ci --prefix backend
+          npm test --prefix backend
+          npm audit --prefix backend --omit=dev --audit-level=high
+      - name: Configurar ambiente descartável
+        run: |
+          cat > backend/.env <<'ENV'
           PORT=3000
           PGHOST=localhost
           PGPORT=5432
           PGUSER=postgres
           PGPASSWORD=senha-apenas-para-testes-ci
-          PGDATABASE=sisgece
+          PGDATABASE=sisgece_test
           JWT_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-          EOF
-
-      - name: Validar Compose e iniciar serviços
+          ENV
+      - name: Validar Compose e construir contêineres
         run: |
           docker compose --env-file backend/.env config -q
           docker compose --env-file backend/.env up -d --build --wait
-
-      - name: Testar API, banco e login de administrador
+      - name: Executar integração HTTP com PostgreSQL 17
         run: |
-          set -euo pipefail
           curl --fail --silent --show-error http://localhost:8004/api/health
           curl --fail --silent --show-error http://localhost:8004/api/ready
-          docker compose --env-file backend/.env exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT COUNT(*) FROM solicitacoes;"'
-          docker compose --env-file backend/.env exec -T -e ADMIN_EMAIL=admin@exemplo.com -e ADMIN_PASSWORD=senha-forte-de-teste-123 app node scripts/criarAdmin.js
-          curl --fail --silent --show-error -H 'Content-Type: application/json' -d '{"email":"admin@exemplo.com","senha":"senha-forte-de-teste-123"}' http://localhost:8004/auth/login | grep -q '"token"'
-
+          docker compose --env-file backend/.env exec -T -e RUN_DATABASE_TESTS=1 app npm test
+      - name: Preparar registros exclusivos do teste de navegador
+        run: |
+          docker compose --env-file backend/.env exec -T -e ADMIN_EMAIL=admin@example.com -e ADMIN_PASSWORD=senha-forte-de-teste-123 app node scripts/criarAdmin.js
+          docker compose --env-file backend/.env exec -T -e STUDENT_NAME='Estudante <img src=x onerror=alert(1)>' -e STUDENT_ENROLLMENT=ci-20260001 app node scripts/cadastrarEstudante.js
+      - name: Instalar Chromium de teste
+        working-directory: backend
+        run: npx playwright install --with-deps chromium
+      - name: Testar navegador desktop e mobile
+        env:
+          TEST_ADMIN_EMAIL: admin@example.com
+          TEST_ADMIN_PASSWORD: senha-forte-de-teste-123
+        run: node backend/scripts/browserSmoke.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-results
+          path: browser-results/
+          if-no-files-found: ignore
       - name: Exibir logs em caso de falha
         if: failure()
         run: docker compose --env-file backend/.env logs --no-color || true
-
       - name: Limpar ambiente descartável de CI
         if: always()
         run: docker compose --env-file backend/.env down --volumes --remove-orphans || true

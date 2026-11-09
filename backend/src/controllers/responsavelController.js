@@ -34,7 +34,7 @@ async function buscarPorCpf(req, res) {
         res.json(resultado.rows);
 
     } catch (erro) {
-        console.error(erro);
+        console.error('Falha em consulta:', erro.code || 'interno');
 
         res.status(500).json({
             erro: 'Erro ao buscar responsável'
