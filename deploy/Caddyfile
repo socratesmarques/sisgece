@@ -1,0 +1,6 @@
+# Execute Caddy no host com o domínio apontado para este servidor.
+# Substitua sisgece.exemplo.com pelo domínio real e libere 80/443.
+sisgece.exemplo.com {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:8004
+}

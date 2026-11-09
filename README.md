@@ -1,189 +1,165 @@
 # SISGECE
 
-Sistema de gerenciamento de entrada, saída e solicitações escolares do IFCE — Campus Maranguape.
+Sistema de solicitações escolares do IFCE — Campus Maranguape, com Node.js 22+, Express e PostgreSQL 17.
 
-Este repositório reúne a API Node.js/Express/PostgreSQL, o painel administrativo e a interface de demonstração.
+## Comportamento de produção
 
-## Subir com Docker (Linux ou Windows com Docker Desktop)
+A página inicial abre o **painel real da coordenação**. Administradores autenticados podem registrar solicitações por matrícula, consultar pendências e histórico e aprovar/reprovar com observação. As decisões gravam o administrador autenticado e a data da análise; uma solicitação analisada não pode receber outra decisão.
 
-**Pré-requisitos:** Git, Docker Engine + plugin Docker Compose (ou Docker Desktop). A porta **8004/TCP** deve estar livre no servidor. Não é necessário instalar Node.js nem PostgreSQL no host.
+Todas as rotas de estudantes, responsáveis e solicitações exigem uma conta administrativa ativa. Matrícula e CPF são identificadores, **não credenciais**. O autoatendimento de estudantes/responsáveis, perfis separados de portaria/recepção e registro efetivo de entrada/saída ainda não foram implementados na API. Não use uma solicitação aprovada como registro de saída realizada.
 
-### 1. Clonar e entrar na pasta
+A interface conceitual anterior foi preservada para desenvolvimento em `/demo`, com dados fictícios locais. Ela não está disponível em produção e não é incluída na imagem Docker. As contas fictícias não autenticam na API.
+
+## Instalação com Docker
+
+Requer Git, Docker Engine com Compose ou Docker Desktop. Execute na raiz do projeto:
 
 ```bash
 git clone https://github.com/socratesmarques/sisgece.git
 cd sisgece
-```
-
-### 2. Preparar as variáveis de ambiente
-
-No Linux, macOS ou terminal Bash:
-
-```bash
 cp backend/.env.example backend/.env
 ```
 
-No PowerShell:
+No PowerShell, use `Copy-Item backend/.env.example backend/.env`.
 
-```powershell
-Copy-Item backend/.env.example backend/.env
-```
-
-Abra `backend/.env` em um editor (por exemplo, `nano backend/.env` no Linux). Defina **PGPASSWORD** com uma senha forte, e **JWT_SECRET** com uma chave aleatória de pelo menos 32 caracteres. Gere a chave com Node.js, caso esteja instalado:
+Edite `backend/.env`: preencha `PGPASSWORD` com uma senha forte e `JWT_SECRET` com uma chave aleatória. Gere a chave com `openssl rand -hex 32` ou:
 
 ```bash
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-Ou no Linux com OpenSSL:
-
-```bash
-openssl rand -hex 32
-```
-
-Exemplo **ilustrativo** de `backend/.env` (troque os dois valores marcados; não utilize o exemplo em produção):
-
-```dotenv
-PORT=3000
-PGHOST=localhost
-PGPORT=5432
-PGUSER=postgres
-PGPASSWORD=SUBSTITUA_POR_UMA_SENHA_FORTE
-PGDATABASE=sisgece
-JWT_SECRET=SUBSTITUA_POR_UMA_CHAVE_ALEATORIA_DE_64_CARACTERES
-```
-
-**Não envie** `backend/.env` para o Git. O Compose sobrescreve `PGHOST=db`, `PGPORT=5432` e `PORT=3000` internamente. A porta externa continua sendo **8004**.
-
-### 3. Validar e iniciar os contêineres
-
-Execute na raiz do repositório:
+Não envie `.env` ao Git. A aplicação exige uma chave de ao menos 32 caracteres, inclusive em desenvolvimento. O Compose configura `PGHOST=db`, `PGPORT=5432`, `PORT=3000` e `NODE_ENV=production`.
 
 ```bash
 docker compose --env-file backend/.env config -q
 docker compose --env-file backend/.env up -d --build --wait
-```
-
-Na primeira inicialização com banco vazio, o PostgreSQL cria o banco e executa automaticamente `db/init/001_schema.sql`, criando as tabelas necessárias. Os dados ficam no volume nomeado `sisgece_postgres`.
-
-### 4. Conferir status e acessar o sistema
-
-```bash
 docker compose --env-file backend/.env ps
-curl http://localhost:8004/api/health
-curl http://localhost:8004/api/ready
+curl --fail http://localhost:8004/api/health
+curl --fail http://localhost:8004/api/ready
 ```
 
-Se não tiver `curl`, abra os endereços no navegador. `/api/health` verifica o servidor HTTP; `/api/ready` também exige que o PostgreSQL esteja acessível e que as tabelas esperadas existam.
+O banco inicializa `db/init/001_schema.sql` apenas em volumes novos. O volume nomeado `sisgece_postgres` mantém os dados. A atualização não altera o esquema nem remove volumes existentes.
 
-Acesso local:
+Por padrão, **8004 fica vinculada a 127.0.0.1**, acessível apenas no servidor, para uso atrás de um proxy HTTPS. O PostgreSQL não publica a porta 5432. A página de login é `/pages/admin-login.html`; os cookies usam `Secure`, `HttpOnly` e `SameSite=Strict`. Para computadores remotos, use HTTPS: acessar por `http://IP:8004` não permite manter a sessão segura. Navegadores permitem a exceção de desenvolvimento em `http://localhost:8004`.
 
-- Interface: http://localhost:8004
-- Painel administrativo: http://localhost:8004/pages/admin-login.html
-- Diagnóstico: http://localhost:8004/api/ready
+### Criar administrador
 
-Para acessar de outro computador, use `http://IP_DO_SERVIDOR:8004`. Libere a porta **8004/TCP** no firewall do servidor, se necessário; não exponha a porta 5432 do banco.
-
-### 5. Criar um administrador
-
-O sistema **não cria usuário ou senha padrão**. Informe nome (opcional), e-mail e uma senha **com no mínimo 12 caracteres** ao executar o comando abaixo. Os valores são exemplos e devem ser substituídos:
+Não há senha padrão. Em Bash/Linux, leia a senha sem colocá-la no histórico:
 
 ```bash
-docker compose --env-file backend/.env exec -e ADMIN_NAME=Coordenador -e ADMIN_EMAIL=admin@exemplo.com -e ADMIN_PASSWORD='TROQUE-ESTA-SENHA-FORTE' app node scripts/criarAdmin.js
-```
-
-**Segurança:** a senha passada diretamente na linha de comando pode ficar no histórico do terminal. Para evitar isso em Linux/Bash, você pode informá-la sem ecoá-la:
-
-```bash
-read -r -p "E-mail do administrador: " ADMIN_EMAIL
-read -r -s -p "Senha do administrador (minimo 12 caracteres): " ADMIN_PASSWORD
+read -r -p "E-mail: " ADMIN_EMAIL
+read -r -s -p "Senha (mínimo 12 caracteres, máximo 72 bytes): " ADMIN_PASSWORD
 echo
 export ADMIN_EMAIL ADMIN_PASSWORD
 docker compose --env-file backend/.env exec -e ADMIN_EMAIL -e ADMIN_PASSWORD app node scripts/criarAdmin.js
 unset ADMIN_PASSWORD
 ```
 
-Se o e-mail já estiver cadastrado, o script não altera a senha existente. Para fazer login, acesse a página administrativa e use as credenciais criadas.
+`ADMIN_NAME` é opcional. O script normaliza o e-mail e preserva senhas de contas existentes. Para revogar o acesso de uma conta, defina `administradores.ativo = false` via manutenção autorizada do banco: a próxima requisição com aquela sessão será recusada. Trocar `JWT_SECRET` invalida todas as sessões. O logout remove o cookie do navegador; um token previamente copiado continua válido até o vencimento (1 hora) ou a desativação da conta.
 
-### 6. Operações úteis
+### Cadastrar estudantes
+
+O cadastro é uma operação da instituição. Para um registro, sem sobrescrever matrículas existentes:
 
 ```bash
-# Ver logs da aplicação e do banco
-docker compose --env-file backend/.env logs -f app db
-
-# Ver status
-docker compose --env-file backend/.env ps
-
-# Reconstruir depois de um git pull
-git pull
-docker compose --env-file backend/.env up -d --build --wait
-
-# Parar mantendo os dados
-docker compose --env-file backend/.env down
+docker compose --env-file backend/.env exec \
+  -e STUDENT_NAME='Nome do estudante' \
+  -e STUDENT_ENROLLMENT='20260001' \
+  -e STUDENT_COURSE='Informática' \
+  -e STUDENT_CLASS='Turma A' \
+  app node scripts/cadastrarEstudante.js
 ```
 
-**Nunca use `docker compose down -v` em um banco com dados importantes:** `-v` remove o volume PostgreSQL. Faça backups antes de alterar a configuração ou atualizar o banco.
+Para carga em lote ou vínculos de responsáveis, use importação SQL revisada pela instituição. A API valida o vínculo quando uma solicitação informa `responsavel_id`. O formulário interno registra solicitações da equipe, sem atribuí-las a um responsável.
 
-### Banco já existente (volume anterior)
+## Publicar com HTTPS
 
-O PostgreSQL executa scripts em `/docker-entrypoint-initdb.d` **somente quando o diretório de dados está vazio**. Uma instalação antiga mantém seus dados e não recebe o novo esquema automaticamente.
-
-**Faça backup e confira se as tabelas já existem** antes de aplicar o esquema:
+1. Aponte um domínio para o servidor e libere somente 80/443 para acesso público.
+2. Instale Caddy no **host**, substitua `sisgece.exemplo.com` em `deploy/Caddyfile` pelo domínio real e configure esse arquivo no serviço Caddy. Ele encaminha para `127.0.0.1:8004` e gerencia certificados.
+3. Mantenha `APP_BIND_ADDRESS=127.0.0.1`. Defina `TRUST_PROXY` somente com o IP/CIDR do proxy que a aplicação realmente enxerga. No Docker Linux, o proxy no host costuma aparecer como o gateway da rede Docker; identifique-o antes de configurar. Exemplo para descobrir o gateway:
 
 ```bash
-docker compose --env-file backend/.env exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > sisgece-backup.sql
+docker inspect sisgece-app --format '{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}'
+```
+
+Se o gateway retornado for `172.18.0.1`, use `TRUST_PROXY=172.18.0.1`. O valor depende da rede local; não copie esse IP sem verificar. Sem proxy, mantenha `false`; em execução direta no host atrás de Caddy local, use `loopback`. São aceitos IPs/CIDRs explícitos separados por vírgula. Não se aceita confiança global (`true` ou `0.0.0.0/0`). Não exponha a porta da aplicação diretamente quando confiar em cabeçalhos encaminhados.
+
+```bash
+docker compose --env-file backend/.env up -d --build --wait
+```
+
+Acesse `https://SEU_DOMINIO`, faça login e valide criação/análise com um cadastro de teste autorizado. O limite de login é de 10 tentativas por IP em 15 minutos; o limite geral é 120 requisições por minuto. Os contadores são locais ao processo. Esta configuração destina-se a **uma instância** da aplicação; múltiplas réplicas exigem um armazenamento compartilhado para os limites. Sem `TRUST_PROXY` correto, usuários atrás do proxy compartilham os limites.
+
+Nenhum servidor é atualizado automaticamente pelo PR: domínio, certificados, segredos e aplicação no servidor devem ser configurados no ambiente de destino.
+
+## Atualizar, fazer backup e restaurar
+
+Antes de atualizar, proteja o arquivo de backup (contém dados pessoais):
+
+```bash
+mkdir -p backups
+chmod 700 backups
+umask 077
+docker compose --env-file backend/.env exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > "backups/sisgece-$(date +%Y%m%d-%H%M%S).dump"
+```
+
+Copie os backups para outro local protegido e teste a restauração periodicamente. Para testar uma restauração **em banco separado**, crie um banco descartável `sisgece_restore_test` no mesmo PostgreSQL, com espaço disponível:
+
+```bash
+docker compose --env-file backend/.env exec -T db sh -c 'createdb -U "$POSTGRES_USER" sisgece_restore_test'
+docker compose --env-file backend/.env exec -T db sh -c 'pg_restore --exit-on-error --no-owner -U "$POSTGRES_USER" -d sisgece_restore_test' < backups/ARQUIVO.dump
+```
+
+O banco restaurado também contém dados pessoais: controle o acesso e remova-o após verificar a recuperação. Não restaure sobre o banco ativo sem uma janela de manutenção e um plano de recuperação.
+
+```bash
+git pull --ff-only
+docker compose --env-file backend/.env up -d --build --wait
+docker compose --env-file backend/.env logs --tail=100 app db
+```
+
+Esta versão invalida tokens antigos, troca sessões em sessionStorage por cookies e restringe as antigas rotas públicas. Os usuários precisam fazer login novamente. Reversão de código: volte ao commit anterior e reconstrua os contêineres, preservando o volume. A reversão também restaura os problemas de acesso da versão anterior.
+
+**Nunca execute `docker compose down -v` em produção:** isso apaga o volume. Para parar mantendo dados, use `docker compose --env-file backend/.env down`.
+
+### Volume antigo sem tabelas
+
+Após backup, confira o esquema:
+
+```bash
 docker compose --env-file backend/.env exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\dt"'
 ```
 
-Se o banco anterior **não tiver as tabelas**, aplique o arquivo SQL sem apagar o volume:
+Se as tabelas não existirem, aplique o esquema inicial sem remover o volume:
 
 ```bash
 docker compose --env-file backend/.env exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < db/init/001_schema.sql
 ```
 
-Esse comando de redirecionamento é para Bash/Linux; no Windows use um terminal Bash/WSL. O SQL cria as tabelas que faltarem, mas **não migra formatos de tabelas existentes**. Se já houver tabelas com estrutura diferente, revise antes de aplicar em produção.
+Os comandos com redirecionamento são para Bash/WSL. `CREATE TABLE IF NOT EXISTS` não migra formatos incompatíveis de tabelas existentes. Alterar `PGPASSWORD` no `.env` também não muda a senha já armazenada no PostgreSQL.
 
-### Se algo não iniciar
-
-1. Execute `docker compose --env-file backend/.env config -q`. Se falhar, confira `PGUSER`, `PGPASSWORD`, `PGDATABASE` e `JWT_SECRET` no arquivo `backend/.env`.
-2. Consulte `docker compose --env-file backend/.env logs --tail=100 app db`.
-3. Se a API estiver `unhealthy`, teste `/api/ready` e confira as tabelas.
-4. Se a porta 8004 estiver ocupada, libere-a no host; a configuração padrão do projeto usa **8004:3000**.
-5. Alterar a senha do PostgreSQL no `.env` após o banco ter sido inicializado **não muda automaticamente a senha gravada no volume**.
-
-## Estado da integração
-
-A interface principal usa dados de demonstração no navegador (`CONFIG.USE_MOCK = true` em `frontend/assets/js/app.js`). Ela ainda **não persiste solicitações no PostgreSQL**.
-
-O painel de `/pages/admin-login.html` utiliza a API real, autenticação JWT e análise de solicitações. A interface principal espera um contrato diferente do backend atual; apenas mudar `USE_MOCK` não resolve a integração.
-
-**Atenção ao uso público:** as rotas legadas de estudantes e responsáveis ainda precisam de um modelo completo de autenticação e autorização para dados pessoais. Não use informações reais de estudantes em uma implantação pública antes de revisar esses controles, HTTPS e política de acesso.
-
-## Executar sem Docker (desenvolvimento)
-
-Requer Node.js 20+ e um PostgreSQL configurado separadamente para as rotas persistentes:
+## Desenvolvimento e testes
 
 ```bash
 npm ci --prefix backend
 cp backend/.env.example backend/.env
-# Edite backend/.env antes de iniciar.
+# Preencha as variáveis, inclusive JWT_SECRET, e configure um PostgreSQL local.
 npm start --prefix backend
+npm test --prefix backend
+npm audit --prefix backend --omit=dev
 ```
 
-A interface de demonstração fica em http://localhost:3000. Para iniciar com o esquema, execute `db/init/001_schema.sql` no banco PostgreSQL configurado.
+Sem `NODE_ENV=production`, o cookie permite HTTP local e `/demo` está disponível com dados fictícios. O painel real continua exigindo banco e login.
 
-## Estrutura
+Os testes de segurança funcionam sem banco. Para incluir testes de integração HTTP/SQL, use exclusivamente um banco **descartável com nome terminado em `_test`** e configure `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD` e `PGDATABASE`:
 
-```text
-Dockerfile                    Imagem do backend e frontend estático
-docker-compose.yml            Aplicação e PostgreSQL
-db/init/001_schema.sql        Esquema inicial para banco novo
-backend/app.js                API Express e health/readiness
-backend/scripts/criarAdmin.js Cadastro manual de administrador
-backend/src/                  Rotas, controllers, autenticação e conexão
-frontend/                     Interface de demonstração e painel admin
-.github/workflows/            Smoke test Docker em pull requests
+```bash
+RUN_DATABASE_TESTS=1 npm test --prefix backend
 ```
+
+O teste instala o esquema inicial e cria/remove somente seus registros de teste. Não o execute sobre dados reais. A CI executa testes com PostgreSQL 17, auditoria de dependências, build Docker e teste do navegador.
+
+O endpoint `/api/health` verifica o processo; `/api/ready` verifica o banco e a presença das tabelas. Há timeout de conexão/consulta, encerramento gracioso, cabeçalhos de segurança, CSP e rotação de logs. A aplicação executa sem root, com filesystem somente leitura e sem capabilities no Compose. Listagens são limitadas a 500 registros (pendências mais antigas ou histórico mais recente); consultas específicas por matrícula continuam disponíveis.
 
 ## Equipe
 

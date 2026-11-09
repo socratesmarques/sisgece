@@ -45,3 +45,5 @@ backend/*.sqlite-journal
 # --- BACKUPS LOCAIS / DADOS SENSIVEIS ---
 sisgece-backup*.sql
 backups/
+
+browser-results/

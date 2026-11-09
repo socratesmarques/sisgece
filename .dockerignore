@@ -8,3 +8,10 @@
 **/npm-debug.log*
 **/coverage
 .DS_Store
+
+**/.env*
+backups/
+**/*.dump
+**/*backup*.sql
+browser-results/
+backend/scripts/browserSmoke.js

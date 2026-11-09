@@ -6,6 +6,7 @@ const {
 } = require('../controllers/estudanteController');
 
 const router = express.Router();
+router.use(require('../middlewares/authMiddleware'));
 
 router.get('/', listarEstudantes);
 

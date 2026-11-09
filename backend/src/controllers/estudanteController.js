@@ -3,12 +3,12 @@ const pool = require('../config/database');
 async function listarEstudantes(req, res) {
     try {
         const resultado = await pool.query(
-            'SELECT * FROM estudantes ORDER BY id'
+            'SELECT id, nome, matricula, curso, turma FROM estudantes ORDER BY id LIMIT 500'
         );
 
         res.json(resultado.rows);
     } catch (erro) {
-        console.error(erro);
+        console.error('Falha em consulta:', erro.code || 'interno');
 
         res.status(500).json({
             erro: 'Erro ao buscar estudantes'
@@ -21,7 +21,7 @@ async function buscarPorMatricula(req, res) {
         const { matricula } = req.params;
 
         const resultado = await pool.query(
-            'SELECT * FROM estudantes WHERE matricula = $1',
+            'SELECT id, nome, matricula, curso, turma FROM estudantes WHERE matricula = $1',
             [matricula]
         );
 
@@ -34,7 +34,7 @@ async function buscarPorMatricula(req, res) {
         res.json(resultado.rows[0]);
 
     } catch (erro) {
-        console.error(erro);
+        console.error('Falha em consulta:', erro.code || 'interno');
 
         res.status(500).json({
             erro: 'Erro ao buscar estudante'
