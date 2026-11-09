@@ -41,7 +41,8 @@ test('fluxo HTTP com PostgreSQL real: sessão, validação, criação e decisõe
             assert.equal((await fetch(base + '/auth/me', auth())).status, 200);
         });
         await t.test('valida campos antes da escrita e responsável deve estar vinculado', async () => {
-            for (const data of [{ estudante_id: true }, { estudante_id: [estudanteId] },
+            for (const data of [{ estudante_id: true }, { estudante_id: 2147483648 },
+                { data_solicitada: '0000-01-01' }, { estudante_id: [estudanteId] },
                 { data_solicitada: '2026-02-30' }, { horario_solicitado: '25:00' },
                 { justificativa: ' ' }, { justificativa: 'x'.repeat(2001) }, { tipo: {} }]) {
                 const res = await fetch(base + '/solicitacoes', auth(json({ estudante_id: estudanteId,
@@ -50,6 +51,7 @@ test('fluxo HTTP com PostgreSQL real: sessão, validação, criação e decisõe
             }
             assert.equal((await fetch(base + '/solicitacoes', auth(json({ estudante_id: estudanteId,
                 responsavel_id: responsavelId, tipo: 'Saída antecipada', justificativa: 'Consulta' })))).status, 400);
+            assert.equal((await fetch(base + '/solicitacoes/1/aprovar', auth({ ...json([]), method: 'PATCH' }))).status, 400);
         });
         let solicitacaoId;
         await t.test('persiste solicitação com vínculo validado e ignora campos de decisão enviados', async () => {

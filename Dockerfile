@@ -9,6 +9,7 @@ COPY backend/package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY backend/ ./
+COPY db/init/ /app/db/init/
 COPY frontend/pages/ /app/frontend/pages/
 COPY frontend/assets/css/ /app/frontend/assets/css/
 COPY frontend/assets/js/admin-login.js frontend/assets/js/admin-dashboard.js /app/frontend/assets/js/
