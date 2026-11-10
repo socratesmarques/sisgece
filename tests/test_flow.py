@@ -49,6 +49,22 @@ class Flow(unittest.TestCase):
     def post(self, c, path, data):
         return c.post("/api/" + path, json=data, headers={"X-SISGECE": "1"})
 
+    def test_login_limits_count_failures_and_ignore_spoofed_headers(self):
+        client = app.test_client()
+        login = {"usuario": "user0", "senha": self.password}
+        def attempt(body, number=0, remote="192.0.2.10"):
+            return client.post("/api/login", json=body,
+                environ_overrides={"REMOTE_ADDR":remote},
+                headers={"X-SISGECE":"1", "X-Forwarded-For":f"198.51.100.{number}",
+                         "X-SISGECE-Proxy":"incorrect", "X-SISGECE-Client":f"198.51.100.{number}"}).status_code
+        for _ in range(17):
+            self.assertEqual(attempt(login),200)
+        for i in range(15):
+            self.assertEqual(attempt(dict(login,senha="errada"),i),401)
+        self.assertEqual(attempt(login,16),429)
+        self.assertEqual(attempt(dict(login,usuario="user1")),200)
+        self.assertEqual(attempt(login,remote="192.0.2.11"),200)
+
     def test_workflow(self):
         public = app.test_client()
         self.assertEqual(public.get("/api/pedidos").status_code, 401)

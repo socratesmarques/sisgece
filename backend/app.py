@@ -1,4 +1,5 @@
 import hashlib
+from ipaddress import ip_address
 import os
 import re
 import secrets
@@ -100,19 +101,57 @@ def digest(v):
     return hashlib.sha256(v.encode()).hexdigest()
 
 
+PROXY_SECRET = os.environ.get("SISGECE_PROXY_SECRET", "")
+if PROXY_SECRET and len(PROXY_SECRET) < 32:
+    raise RuntimeError("SISGECE_PROXY_SECRET requer pelo menos 32 caracteres.")
+
+
+def client_address():
+    # Caddy overwrites both private headers. Ignore untrusted forwarding chains.
+    provided = request.headers.get("X-SISGECE-Proxy", "")
+    if PROXY_SECRET and secrets.compare_digest(provided.encode(), PROXY_SECRET.encode()):
+        try:
+            return str(ip_address(request.headers.get("X-SISGECE-Client", "")))
+        except ValueError:
+            pass
+    return request.remote_addr or "unknown"
+
+
+def increment(conn, key):
+    return conn.execute("""INSERT INTO limites VALUES (%s,floor(extract(epoch FROM now())/600),1)
+        ON CONFLICT(chave) DO UPDATE SET quantidade=CASE WHEN limites.janela=excluded.janela
+        THEN limites.quantidade+1 ELSE 1 END, janela=excluded.janela RETURNING quantidade""",
+        (key,)).fetchone()[0]
+
+
+def expire_counters(conn):
+    conn.execute("DELETE FROM limites WHERE janela < floor(extract(epoch FROM now())/600)-1")
+
+
+def limited():
+    abort(429, "Limite de tentativas. Tente novamente em dez minutos.")
+
+
 def limit(kind, maximum):
-    key = digest(kind + ":" + request.remote_addr)
     with psycopg.connect() as conn:
-        conn.execute(
-            "DELETE FROM limites WHERE janela < floor(extract(epoch FROM now())/600)-1"
-        )
-        n = conn.execute(
-            """INSERT INTO limites VALUES (%s,floor(extract(epoch FROM now())/600),1)
-            ON CONFLICT(chave) DO UPDATE SET quantidade=CASE WHEN limites.janela=excluded.janela THEN limites.quantidade+1 ELSE 1 END, janela=excluded.janela RETURNING quantidade""",
-            (key,),
-        ).fetchone()[0]
-    if n > maximum:
-        abort(429, "Limite de tentativas. Tente novamente em dez minutos.")
+        expire_counters(conn)
+        count = increment(conn, digest(kind + ":" + client_address()))
+    if count > maximum:
+        limited()
+
+
+def check_login_budget(username):
+    address = client_address()
+    pair = digest("login-pair:" + address + ":" + username)
+    source = digest("login-source:" + address)
+    # Serialize checks for this client; a failed-login transaction is recorded
+    # before releasing the lock, even though the HTTP request returns 401.
+    query("SELECT pg_advisory_xact_lock(%s)", (int(source[:15], 16),))
+    if query("""SELECT 1 FROM limites WHERE janela=floor(extract(epoch FROM now())/600)
+        AND ((chave=%s AND quantidade>=15) OR (chave=%s AND quantidade>=60))""",
+        (pair,source)).fetchone():
+        limited()
+    return pair,source
 
 
 def staff(*roles):
@@ -156,10 +195,11 @@ def ready():
 
 @app.post("/api/login")
 def login():
-    limit("login", 15)
+    username = value("usuario", 64).lower()
+    pair, source = check_login_budget(username)
     row = query(
         "SELECT * FROM administradores WHERE lower(usuario)=%s AND ativo",
-        (value("usuario", 64).lower(),),
+        (username,),
     ).fetchone()
     password = request.json.get("senha")
     if not isinstance(password, str) or not 1 <= len(password) <= 512:
@@ -174,6 +214,10 @@ def login():
         else check_password_hash(hashed, password)
     )
     if not row or not valid:
+        with psycopg.connect() as conn:
+            expire_counters(conn)
+            increment(conn, pair)
+            increment(conn, source)
         abort(401, "Credenciais inválidas.")
     token = secrets.token_urlsafe(32)
     query("DELETE FROM sessoes WHERE expira<=now()")

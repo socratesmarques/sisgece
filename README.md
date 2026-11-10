@@ -44,6 +44,8 @@ docker run -d --name sisgece-app --network sisgece-net --restart unless-stopped 
 
 **Servidor Linux da rede interna** (com HTTPS). A aplicação usa cookies Secure por padrão. Configure no DNS interno o nome do servidor, ajuste o domínio em deploy/Caddyfile e configure o Caddy no host para encaminhar ao endereço abaixo. Use certificado institucional ou CA interna confiável nas estações. Libere a porta 443 para a rede autorizada e mantenha PostgreSQL e a porta 8004 privados. Não use LOCAL_HTTP em produção.
 
+Para distinguir as estações, gere um segredo com `openssl rand -hex 32`. Configure o mesmo valor de `SISGECE_PROXY_SECRET` no app.env.local e no ambiente do serviço Caddy (por exemplo, um EnvironmentFile com acesso restrito). O Caddyfile substitui os cabeçalhos privados pelo endereço da conexão e pela credencial do proxy. Nunca inclua essa credencial nos logs. Se o segredo estiver ausente ou for diferente, os limites usam o endereço da conexão direta, que pode ser compartilhado pelo campus. Esta configuração pressupõe um único proxy de borda; valide a origem observada se houver NAT ou outro intermediário.
+
 ```sh
 docker run -d --name sisgece-app --network sisgece-net --restart unless-stopped --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges --env-file app.env.local -p 127.0.0.1:8004:3000 sisgece:python
 ```
@@ -101,4 +103,4 @@ python -m playwright install chromium
 python tests/browser.py
 ```
 
-A CI exercita PostgreSQL 17, a imagem Docker e Chromium. O navegador usa apenas arquivos locais ao servidor. O limite de tentativas é compartilhado no banco por endereço de conexão, em janelas de dez minutos. Atrás de proxy, clientes do mesmo proxy compartilham esse limite. A aplicação ignora cabeçalhos de IP enviados pelo cliente.
+A CI exercita PostgreSQL 17, a imagem Docker e Chromium. O navegador usa apenas arquivos locais ao servidor. Os limites usam janelas de dez minutos no PostgreSQL. Logins corretos não consomem tentativas. Após 15 falhas para o mesmo usuário e origem, novas tentativas dessa combinação são bloqueadas até a janela virar; após 60 falhas da mesma origem, o bloqueio vale para todos os usuários dessa origem. Formulário e consulta têm contadores independentes.
