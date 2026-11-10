@@ -99,6 +99,8 @@ if ($("pedido")) {
       location.reload();
     });
   bind("filtro", () => list());
+  $("conta").onreset = () => { $("conta").elements.id.value = ""; };
+  bind("filtro-contas", () => audit());
   bind("conta", async (body) => {
     body.ativo = $("conta").elements.ativo.checked;
     if (body.id) body.id = Number(body.id);
@@ -276,9 +278,10 @@ async function accounts(page = 1) {
   pager(el, page, r.mais, accounts);
 }
 async function audit(page = 1) {
-  const r = await api("auditoria?pagina=" + page),
+  const r = await api("auditoria?pagina=" + page + "&" + new URLSearchParams(fields($("filtro-contas")))),
     el = $("audit");
   el.replaceChildren();
+  if (!r.itens.length) node(el, "p", "Nenhum evento encontrado.");
   for (const e of r.itens)
     node(
       el,
@@ -287,3 +290,4 @@ async function audit(page = 1) {
     );
   pager(el, page, r.mais, audit);
 }
+

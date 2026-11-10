@@ -421,9 +421,10 @@ def accounts():
 @app.get("/api/auditoria")
 @staff("superusuário")
 def audit():
+    term = "%" + request.args.get("q", "")[:200] + "%"
     rows = listing(
-        """SELECT e.acao,e.nota,e.quando,a.nome FROM eventos e LEFT JOIN administradores a ON a.id=e.autor WHERE solicitacao IS NULL ORDER BY e.id DESC""",
-        (),
+        """SELECT e.acao,e.nota,e.quando,a.nome FROM eventos e LEFT JOIN administradores a ON a.id=e.autor WHERE solicitacao IS NULL AND (e.acao ILIKE %s OR a.nome ILIKE %s OR e.nota ILIKE %s) ORDER BY e.id DESC""",
+        (term, term, term),
     )
     for row in rows["itens"]:
         row["quando"] = instant(row["quando"])
