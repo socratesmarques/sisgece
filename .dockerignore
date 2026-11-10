@@ -15,3 +15,6 @@ backups/
 **/*backup*.sql
 browser-results/
 backend/scripts/browserSmoke.js
+
+*.env.local
+**/__pycache__
