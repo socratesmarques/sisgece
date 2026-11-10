@@ -54,6 +54,13 @@ function pager(parent, page, more, load) {
 }
 if ($("pedido")) {
   const form = $("pedido");
+  function movementGuide() {
+    const entry = form.elements.tipo.value === "Entrada";
+    $("guia-entrada").hidden = !entry;
+    $("guia-saida").hidden = entry;
+  }
+  form.querySelectorAll("[name=tipo]").forEach(radio => radio.addEventListener("change", movementGuide));
+  movementGuide();
   form.origem.onchange = () => {
     $("familia").hidden = $("familia").disabled =
       form.origem.value !== "Responsável";
@@ -69,7 +76,7 @@ if ($("pedido")) {
   bind("pedido", async (body) => {
     const result = await api("solicitar", body);
     $("recibo").textContent =
-      "Solicitação salva. Guarde este código para consultar seu pedido. O envio ainda não autoriza a saída.\nCódigo de consulta: " +
+      ("Solicitação salva. " + (body.tipo === "Entrada" ? "Pedido de entrada recebido." : "O envio ainda não autoriza a saída.")) + " Guarde seu código.\nCódigo de consulta: " +
       result.codigo;
     $("rastrear").elements.codigo.value = result.codigo;
     $("copiar").hidden = false;
@@ -79,6 +86,7 @@ if ($("pedido")) {
         $("aviso").textContent = "Código copiado.";
       });
     form.reset();
+    movementGuide();
     form.origem.onchange();
     $("recibo").focus();
   });
@@ -86,6 +94,7 @@ if ($("pedido")) {
     $("resultado").textContent = "";
     const r = await api("consulta", body);
     $("resultado").textContent = [
+      r.tipo,
       r.status,
       r.status === "APROVADA" ? r.etapa : "",
       r.mensagem,
@@ -146,7 +155,7 @@ async function list(page = 1) {
     line.className = "record";
     const name = node(line, "div");
     node(name, "strong", item.aluno);
-    node(name, "small", item.protocolo);
+    node(name, "small", item.tipo + " · " + item.protocolo);
     const status = node(
       line,
       "span",
@@ -193,7 +202,7 @@ async function detail(id, page = 1) {
       node(field, "dd", v);
     }
   }
-  if (r.status === "APROVADA") {
+  if (r.status === "APROVADA" && ["saida","saída"].includes(r.tipo.toLowerCase())) {
     node(el, "h3", "Conferência da saída");
     for (const [step, entry] of Object.entries(r.confirmacoes)) {
       const title =

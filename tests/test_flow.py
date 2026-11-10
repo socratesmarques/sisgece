@@ -101,7 +101,7 @@ class Flow(unittest.TestCase):
         self.assertEqual(set(receipt.json), {"codigo"})
         lookup = self.post(public, "consulta", {"codigo":receipt.json["codigo"].lower().replace("-","")})
         self.assertEqual(
-            lookup.json, dict(etapa="saída concluída", status="APROVADA", mensagem="")
+            lookup.json, dict(tipo="Saída", etapa="saída concluída", status="APROVADA", mensagem="")
         )
         self.assertEqual(
             self.post(
@@ -119,6 +119,14 @@ class Flow(unittest.TestCase):
         path = "pedidos/" + str(max(ids.values()))
         self.assertEqual(act(coord, "reprovar"), 400)
         self.assertEqual(act(coord, "reprovar", mensagem="Dados insuficientes"), 200)
+        entry = self.post(public, "solicitar", dict(form,tipo="Entrada"))
+        self.assertEqual(entry.status_code,201)
+        self.assertEqual(self.post(public,"consulta",entry.json).json,dict(tipo="Entrada",status="RECEBIDA",etapa=None,mensagem=None))
+        path = "pedidos/"+str(coord.get("/api/pedidos?status=RECEBIDA").json["itens"][0]["id"])
+        self.assertEqual(act(coord,"aprovar"),409)
+        self.assertEqual(act(desk,"recepção"),409)
+        self.assertEqual(gate.get("/api/"+path).status_code,404)
+        self.assertEqual(self.post(public,"solicitar",dict(form,tipo="outro")).status_code,400)
         account = dict(
             nome="Nova", email="nova@test.edu", perfil="recepção", senha=self.password
         )

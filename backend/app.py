@@ -233,14 +233,17 @@ def submit():
             raise ValueError
     except ValueError:
         abort(400, "Data ou hora inválida.")
+    movement = request.json.get("tipo", "Saída")
+    if movement not in ("Entrada", "Saída"):
+        abort(400, "Escolha entrada ou saída.")
     secret = "".join(secrets.choice("23456789ABCDEFGHJKLMNPQRSTUVWXYZ") for _ in range(10))
     protocol = secrets.token_hex(8).upper()
     sid = query(
-        """INSERT INTO solicitacoes(tipo,declarado,protocolo,segredo,justificativa,data_solicitada,horario_solicitado)
-        VALUES ('Saída',%s,%s,%s,%s,%s,%s) RETURNING id""",
-        (Jsonb(data), protocol, digest(secret), value("justificativa", 2000), dt, tm),
+        """INSERT INTO solicitacoes(tipo,status,etapa,declarado,protocolo,segredo,justificativa,data_solicitada,horario_solicitado)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+        (movement, "RECEBIDA" if movement=="Entrada" else "PENDENTE", None if movement=="Entrada" else "aguardando", Jsonb(data), protocol, digest(secret), value("justificativa", 2000), dt, tm),
     ).fetchone()["id"]
-    event("Envio por " + data["origem"], sid)
+    event(movement+" · envio por " + data["origem"], sid)
     return {"codigo": secret[:5] + "-" + secret[5:]}, 201
 
 
@@ -253,7 +256,7 @@ def track():
     if re.fullmatch(r"[2-9A-HJ-NP-Z]{10}", normalized):
         code = normalized
     row = query(
-        "SELECT status,etapa,mensagem FROM solicitacoes WHERE segredo=%s",
+        "SELECT tipo,status,etapa,mensagem FROM solicitacoes WHERE segredo=%s",
         (digest(code),),
     ).fetchone()
     if not row:
@@ -284,7 +287,7 @@ def requests_list():
     status = request.args.get("status", "")
     day = request.args.get("data", "")
     return listing(
-        """SELECT id,protocolo,declarado->>'aluno' AS aluno,status,etapa FROM solicitacoes
+        """SELECT id,tipo,protocolo,declarado->>'aluno' AS aluno,status,etapa FROM solicitacoes
         WHERE (protocolo ILIKE %s OR declarado->>'aluno' ILIKE %s OR declarado->>'matricula' ILIKE %s)
         AND (%s='' OR status=%s) AND (%s='' OR data_solicitada::text=%s)
         AND (%s OR (status='APROVADA' AND lower(tipo) IN ('saida','saída'))) ORDER BY id DESC""",
@@ -355,7 +358,7 @@ def act(sid):
     if not row:
         abort(404)
     if row["tipo"].lower() not in ("saida", "saída"):
-        abort(409, "Registro histórico de outro tipo.")
+        abort(409, "Esta ação é exclusiva para solicitações de saída.")
     status, stage = row["status"], row["etapa"]
     note = value("nota", 2000, False)
     if action in ("aprovar", "reprovar") and status == "PENDENTE":
