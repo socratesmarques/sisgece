@@ -419,8 +419,9 @@ def act(sid):
 @app.get("/api/contas")
 @staff("superusuário")
 def accounts():
+    term = "%" + request.args.get("q", "")[:200] + "%"
     return listing(
-        "SELECT id,nome,email,ativo,perfil FROM administradores ORDER BY id", ()
+        "SELECT id,nome,email,ativo,perfil FROM administradores WHERE nome ILIKE %s OR email ILIKE %s ORDER BY lower(nome),id", (term,term)
     )
 
 

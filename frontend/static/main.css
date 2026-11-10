@@ -632,3 +632,16 @@ footer b {
 .movimento label{display:flex;align-items:center;gap:.65rem;border:1px solid var(--line);border-radius:.6rem;padding:.7rem;cursor:pointer}
 .movimento label:has(:checked){background:#e1f2e8;border-color:var(--green)}
 .movimento input{accent-color:var(--green);width:1.1rem!important;min-height:0!important;margin:0!important}
+.areas{display:flex;gap:.4rem;margin:1.2rem 0 0;border-bottom:1px solid var(--line)}
+.areas button{background:transparent;color:var(--muted);border-radius:0;border-bottom:3px solid transparent}
+.areas [aria-pressed=true]{color:var(--green);border-color:var(--green)}
+.directory-head,.editor-actions{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.directory-head p,#editor small{color:var(--muted)}
+#buscar-equipe{grid-template-columns:minmax(0,26rem) auto;justify-content:start}
+.person{display:grid;grid-template-columns:minmax(0,1fr) minmax(7rem,.35fr) 5rem auto;align-items:center;gap:.6rem}
+.person small,#editor small{display:block;font-weight:400}.role-name{text-transform:capitalize}.access-state{justify-self:start;background:#eceeeb;padding:.2rem .65rem;border-radius:1rem;font-size:.85rem}.enabled{background:#dff1e5;color:#174d38}
+.audit-box{border-top:1px solid var(--line);margin-top:1rem;padding-top:1rem}.audit-box summary{cursor:pointer;font-weight:650}
+#editor{width:min(32rem,92vw);max-height:90vh;border:1px solid var(--line);border-radius:1rem;padding:1.6rem;color:var(--ink)}
+#editor::backdrop{background:#09281fc2}#editor form{grid-template-columns:1fr;margin-bottom:0}#editor small{margin-top:.3rem}
+.editor-actions{justify-content:flex-end;border-top:1px solid var(--line);padding-top:1rem}#cancelar{color:var(--ink);background:#edf2ee}#erro-conta:not(:empty){color:#8b3223;margin-top:.75rem}
+@media(max-width:620px){.person{grid-template-columns:minmax(0,1fr) auto}.person div{grid-column:1/-1}.person button{grid-column:2;grid-row:2/4}.person .access-state{grid-column:1}.directory-head{align-items:start}.role-name{font-size:.9rem}}

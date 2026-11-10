@@ -113,19 +113,39 @@ if ($("pedido")) {
       location.reload();
     });
   bind("filtro", () => list());
-  $("conta").onreset = () => {
-    $("conta").elements.id.value = "";
+  const selectArea = async (team) => {
+    $("admin").hidden = !team;
+    $("area-pedidos").hidden = team;
+    $("ver-equipe").setAttribute("aria-pressed", String(team));
+    $("ver-pedidos").setAttribute("aria-pressed", String(!team));
+    if (team) await accounts();
   };
+  $("ver-equipe").onclick = () => run(() => selectArea(true));
+  $("ver-pedidos").onclick = () => run(() => selectArea(false));
+  $("adicionar").onclick = () => editAccount();
+  $("cancelar").onclick = () => $("editor").close();
+  $("conta").elements.perfil.onchange = roleHelp;
+  bind("buscar-equipe", () => accounts());
   bind("filtro-contas", () => audit());
+  document.querySelector(".audit-box").ontoggle = (e) => {
+    if (e.target.open) run(() => audit());
+  };
   bind("conta", async (body) => {
+    const editing = Boolean(body.id);
     body.ativo = $("conta").elements.ativo.checked;
-    if (body.id) body.id = Number(body.id);
+    if (editing) body.id = Number(body.id);
     else delete body.id;
-    await api("contas", body);
-    $("conta").reset();
+    try {
+      await api("contas", body);
+    } catch (error) {
+      $("erro-conta").textContent = error.message;
+      return;
+    }
+    $("editor").close();
+    if (body.id === user.id) { location.reload(); return; }
     await accounts();
-    await audit();
-    $("aviso").textContent = "Conta salva.";
+    if (document.querySelector(".audit-box").open) await audit();
+    $("aviso").textContent = editing ? "Alterações salvas." : "Funcionário adicionado.";
   });
   run(async () => {
     const response = await fetch("/api/me");
@@ -137,9 +157,7 @@ if ($("pedido")) {
     $("perfil").textContent = "Painel de " + user.perfil + " · " + user.nome;
     await list();
     if (user.perfil === "superusuário") {
-      $("admin").hidden = false;
-      await accounts();
-      await audit();
+      $("areas").hidden = false;
     }
   });
 }
@@ -293,26 +311,51 @@ async function detail(id, page = 1) {
   pager(el, page, r.historico.mais, (p) => detail(id, p));
   el.scrollIntoView();
 }
-async function accounts(page = 1) {
-  const r = await api("contas?pagina=" + page),
-    el = $("contas");
-  el.replaceChildren();
-  for (const a of r.itens) {
-    const line = node(
-      el,
-      "article",
-      a.nome + " · " + a.perfil + " · " + (a.ativo ? "Ativa" : "Inativa") + " ",
-    );
-    button(line, "Editar", () => {
-      const f = $("conta");
-      f.reset();
-      for (const k of ["id", "nome", "email", "perfil"])
-        f.elements[k].value = a[k];
-      f.elements.ativo.checked = a.ativo;
-      f.elements.nome.focus();
-    });
+function roleHelp() {
+  const descriptions = {
+    "coordenação": "Analisa solicitações e decide sobre as saídas.",
+    "recepção": "Confere autorizações de saída aprovadas.",
+    "portaria": "Registra a saída após a conferência da recepção.",
+    "superusuário": "Gerencia funcionários, permissões e análises."
+  };
+  $("ajuda-perfil").textContent = descriptions[$("conta").elements.perfil.value];
+}
+function editAccount(account) {
+  const f = $("conta");
+  f.reset();
+  f.elements.id.value = account?.id || "";
+  if (account) {
+    for (const key of ["nome","email","perfil"]) f.elements[key].value = account[key];
   }
-  pager(el, page, r.mais, accounts);
+  f.elements.ativo.checked = account ? account.ativo : true;
+  $("estado-conta").hidden = !account;
+  f.elements.senha.required = !account;
+  $("titulo-conta").textContent = account ? "Editar funcionário" : "Adicionar funcionário";
+  $("rotulo-senha").textContent = account ? "Nova senha (opcional)" : "Senha de acesso";
+  $("ajuda-senha").textContent = account ? "Deixe em branco para manter a senha atual." : "Use pelo menos 12 caracteres.";
+  $("salvar").textContent = account ? "Salvar alterações" : "Criar conta";
+  $("erro-conta").textContent = "";
+  roleHelp();
+  $("editor").showModal();
+  f.elements.nome.focus();
+}
+async function accounts(page = 1) {
+  const params = new URLSearchParams(fields($("buscar-equipe")));
+  params.set("pagina",page);
+  const r = await api("contas?"+params), el = $("contas");
+  el.replaceChildren();
+  if (!r.itens.length) node(el,"p","Nenhum funcionário encontrado.");
+  for (const a of r.itens) {
+    const line = node(el,"article");
+    line.className = "person";
+    const identity = node(line,"div");
+    node(identity,"strong",a.nome);
+    node(identity,"small",a.email);
+    node(line,"span",a.perfil).className="role-name";
+    node(line,"span",a.ativo ? "Ativo" : "Inativo").className="access-state "+(a.ativo?"enabled":"");
+    button(line,"Editar",()=>editAccount(a)).setAttribute("aria-label","Editar "+a.nome);
+  }
+  pager(el,page,r.mais,accounts);
 }
 async function audit(page = 1) {
   const r = await api(
