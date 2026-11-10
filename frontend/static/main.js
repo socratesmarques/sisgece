@@ -113,15 +113,18 @@ if ($("pedido")) {
       location.reload();
     });
   bind("filtro", () => list());
-  const selectArea = async (team) => {
-    $("admin").hidden = !team;
-    $("area-pedidos").hidden = team;
-    $("ver-equipe").setAttribute("aria-pressed", String(team));
-    $("ver-pedidos").setAttribute("aria-pressed", String(!team));
-    if (team) await accounts();
-  };
-  $("ver-equipe").onclick = () => run(() => selectArea(true));
-  $("ver-pedidos").onclick = () => run(() => selectArea(false));
+  const sections = {pedidos:"area-pedidos",historico:"historico-pedidos",equipe:"admin"};
+  for (const [area,panel] of Object.entries(sections)) {
+    $("ver-"+area).onclick = () => run(async () => {
+      for (const [key,id] of Object.entries(sections)) {
+        $(id).hidden = key !== area;
+        $("ver-"+key).setAttribute("aria-pressed", String(key === area));
+      }
+      if (area === "equipe") await accounts();
+      if (area === "historico") await requestHistory();
+    });
+  }
+  bind("buscar-historico", () => requestHistory());
   $("adicionar").onclick = () => editAccount();
   $("cancelar").onclick = () => $("editor").close();
   $("conta").elements.perfil.onchange = roleHelp;
@@ -156,9 +159,8 @@ if ($("pedido")) {
     $("painel").hidden = false;
     $("perfil").textContent = "Painel de " + user.perfil + " · " + user.nome;
     await list();
-    if (user.perfil === "superusuário") {
-      $("areas").hidden = false;
-    }
+    $("areas").hidden = false;
+    $("ver-equipe").hidden = user.perfil !== "superusuário";
   });
 }
 async function list(page = 1) {
@@ -325,14 +327,14 @@ function editAccount(account) {
   f.reset();
   f.elements.id.value = account?.id || "";
   if (account) {
-    for (const key of ["nome","email","perfil"]) f.elements[key].value = account[key];
+    for (const key of ["nome","usuario","perfil"]) f.elements[key].value = account[key];
   }
   f.elements.ativo.checked = account ? account.ativo : true;
   $("estado-conta").hidden = !account;
   f.elements.senha.required = !account;
   $("titulo-conta").textContent = account ? "Editar funcionário" : "Adicionar funcionário";
   $("rotulo-senha").textContent = account ? "Nova senha (opcional)" : "Senha de acesso";
-  $("ajuda-senha").textContent = account ? "Deixe em branco para manter a senha atual." : "Use pelo menos 12 caracteres.";
+  $("ajuda-senha").textContent = account ? "Deixe em branco para manter a senha atual." : "Use pelo menos 8 caracteres.";
   $("salvar").textContent = account ? "Salvar alterações" : "Criar conta";
   $("erro-conta").textContent = "";
   roleHelp();
@@ -350,7 +352,7 @@ async function accounts(page = 1) {
     line.className = "person";
     const identity = node(line,"div");
     node(identity,"strong",a.nome);
-    node(identity,"small",a.email);
+    node(identity,"small",a.usuario);
     node(line,"span",a.perfil).className="role-name";
     node(line,"span",a.ativo ? "Ativo" : "Inativo").className="access-state "+(a.ativo?"enabled":"");
     button(line,"Editar",()=>editAccount(a)).setAttribute("aria-label","Editar "+a.nome);
@@ -374,4 +376,19 @@ async function audit(page = 1) {
       [e.quando, e.nome, e.acao, e.nota].filter(Boolean).join(" · "),
     );
   pager(el, page, r.mais, audit);
+}
+
+async function requestHistory(page = 1) {
+  const params = new URLSearchParams(fields($("buscar-historico")));
+  params.set("pagina",page);
+  const r = await api("historico?"+params), el = $("eventos-pedidos");
+  el.replaceChildren();
+  if (!r.itens.length) node(el,"p","Nenhum registro encontrado.");
+  for (const e of r.itens) {
+    const line = node(el,"article");
+    node(line,"strong",e.aluno+" · "+e.tipo);
+    node(line,"p",e.acao+(e.autor?" · "+e.autor:""));
+    node(line,"small",e.quando+" · "+e.protocolo);
+  }
+  pager(el,page,r.mais,requestHistory);
 }

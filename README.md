@@ -48,7 +48,7 @@ docker run -d --name sisgece-app --network sisgece-net --restart unless-stopped 
 docker run -d --name sisgece-app --network sisgece-net --restart unless-stopped --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges --env-file app.env.local -p 127.0.0.1:8004:3000 sisgece:python
 ```
 
-Crie explicitamente o primeiro superusuário e informe nome, e-mail e senha no terminal interativo.
+Crie explicitamente o primeiro superusuário e informe nome, usuário e senha (mínimo de 8 caracteres) no terminal interativo.
 
 ```sh
 docker exec -it sisgece-app python backend/manage.py superuser
@@ -60,7 +60,7 @@ Abra http://localhost:8004 no teste local ou o domínio HTTPS no servidor. Entre
 
 Pare a aplicação antiga antes da migração. Identifique o banco, versão principal do PostgreSQL, rede e volume existentes com `docker inspect sisgece-db`. Mantenha esse banco e suas credenciais. Criar outro volume fará a instalação parecer vazia. Faça backup e ensaie a restauração antes da atualização. Use o procedimento de backup abaixo com os nomes reais do banco e usuário.
 
-A inicialização aplica os scripts numerados de db em uma transação protegida por bloqueio. A tabela versoes controla reaplicações. A migração mantém IDs, estudantes, responsáveis, vínculos institucionais, datas e decisões. Copia os dados disponíveis no legado para consulta interna, com protocolo LEG-id. Como nenhum segredo foi entregue originalmente, esses registros ficam disponíveis somente à equipe. Tipos antigos diferentes de saída permanecem históricos. As contas antigas mantêm o estado ativo e o hash bcrypt e passam a coordenação. Crie uma conta distinta pelo comando superuser e revise os perfis. Sessões antigas exigem novo login.
+A inicialização aplica os scripts numerados de db em uma transação protegida por bloqueio. A tabela versoes controla reaplicações. A migração mantém IDs, estudantes, responsáveis, vínculos institucionais, datas e decisões. Copia os dados disponíveis no legado para consulta interna, com protocolo LEG-id. Como nenhum segredo foi entregue originalmente, esses registros ficam disponíveis somente à equipe. Tipos antigos diferentes de saída permanecem históricos. As contas antigas mantêm o estado ativo e o hash bcrypt e passam a coordenação. Crie uma conta distinta pelo comando superuser e revise os perfis. Na migração 005, o usuário é derivado da parte anterior ao @ do e-mail, em minúsculas. Nomes repetidos recebem sufixo numérico. Confira o identificador no diretório de funcionários ou com SELECT id,nome,usuario FROM administradores. As senhas existentes são preservadas. O histórico de solicitações fica na aba Histórico da área da equipe, com visibilidade limitada ao perfil. Sessões antigas exigem novo login.
 
 Construa a imagem com outra etiqueta, pare e renomeie apenas o contêiner da aplicação, depois repita o comando docker run correspondente apontando para a imagem nova e o mesmo banco. Exemplo:
 

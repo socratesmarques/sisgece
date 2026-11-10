@@ -31,10 +31,10 @@ class Flow(unittest.TestCase):
         with psycopg.connect() as db:
             for role in ROLES:
                 db.execute(
-                    "INSERT INTO administradores(nome,email,senha_hash,perfil) VALUES (%s,%s,%s,%s)",
+                    "INSERT INTO administradores(nome,usuario,senha_hash,perfil) VALUES (%s,%s,%s,%s)",
                     (
                         role,
-                        role + "@test.edu",
+                        "user" + str(ROLES.index(role)),
                         generate_password_hash(cls.password),
                         role,
                     ),
@@ -58,7 +58,7 @@ class Flow(unittest.TestCase):
             c = app.test_client()
             self.assertEqual(
                 self.post(
-                    c, "login", {"email": role + "@test.edu", "senha": self.password}
+                    c, "login", {"usuario": "user" + str(ROLES.index(role)), "senha": self.password}
                 ).status_code,
                 200,
             )
@@ -128,12 +128,16 @@ class Flow(unittest.TestCase):
         self.assertEqual(gate.get("/api/"+path).status_code,404)
         self.assertEqual(self.post(public,"solicitar",dict(form,tipo="outro")).status_code,400)
         account = dict(
-            nome="Nova", email="nova@test.edu", perfil="recepção", senha=self.password
+            nome="Nova", usuario="nova", perfil="recepção", senha="12345678"
         )
+        self.assertEqual(self.post(admin,"contas",dict(account,senha="1234567")).status_code,400)
+        self.assertEqual(public.get("/api/historico").status_code,401)
+        self.assertTrue(coord.get("/api/historico").json["itens"])
+        self.assertFalse(any(e["tipo"]=="Entrada" for e in desk.get("/api/historico").json["itens"]))
         self.assertEqual(self.post(coord, "contas", account).status_code, 403)
         self.assertEqual(self.post(admin, "contas", account).status_code, 200)
         accounts = admin.get("/api/contas").json["itens"]
-        new = next(a for a in accounts if a["email"] == account["email"])
+        new = next(a for a in accounts if a["usuario"] == account["usuario"])
         self.assertEqual(
             self.post(admin, "contas", dict(new, ativo=False)).status_code, 200
         )

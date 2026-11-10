@@ -50,10 +50,10 @@ roles = ("coordenação", "recepção", "portaria")
 with psycopg.connect() as db:
     for role in roles:
         db.execute(
-            "INSERT INTO administradores(nome,email,senha_hash,perfil) VALUES (%s,%s,%s,%s)",
+            "INSERT INTO administradores(nome,usuario,senha_hash,perfil) VALUES (%s,%s,%s,%s)",
             (
                 role,
-                str(roles.index(role)) + suffix + "@teste.edu",
+                str(roles.index(role)) + suffix,
                 generate_password_hash(password),
                 role,
             ),
@@ -64,8 +64,8 @@ with sync_playwright() as pw:
     for width, role in zip((1280, 390, 390), roles):
         page = browser.new_page(viewport={"width": width, "height": 844})
         page.goto(url + "/equipe")
-        page.get_by_label("E-mail", exact=True).first.fill(
-            str(roles.index(role)) + suffix + "@teste.edu"
+        page.get_by_label("Usuário", exact=True).first.fill(
+            str(roles.index(role)) + suffix
         )
         page.get_by_label("Senha", exact=True).fill(password)
         page.get_by_role("button", name="Entrar").click()

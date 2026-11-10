@@ -158,8 +158,8 @@ def ready():
 def login():
     limit("login", 15)
     row = query(
-        "SELECT * FROM administradores WHERE lower(email)=%s AND ativo",
-        (value("email", 254).lower(),),
+        "SELECT * FROM administradores WHERE lower(usuario)=%s AND ativo",
+        (value("usuario", 64).lower(),),
     ).fetchone()
     password = request.json.get("senha")
     if not isinstance(password, str) or not 1 <= len(password) <= 512:
@@ -421,8 +421,24 @@ def act(sid):
 def accounts():
     term = "%" + request.args.get("q", "")[:200] + "%"
     return listing(
-        "SELECT id,nome,email,ativo,perfil FROM administradores WHERE nome ILIKE %s OR email ILIKE %s ORDER BY lower(nome),id", (term,term)
+        "SELECT id,nome,usuario,ativo,perfil FROM administradores WHERE nome ILIKE %s OR usuario ILIKE %s ORDER BY lower(nome),id", (term,term)
     )
+
+
+@app.get("/api/historico")
+@staff()
+def request_history():
+    term = "%" + request.args.get("q", "")[:200] + "%"
+    rows = listing("""SELECT s.protocolo,s.tipo,s.declarado->>'aluno' AS aluno,
+        e.acao,e.quando,a.nome AS autor FROM eventos e
+        JOIN solicitacoes s ON s.id=e.solicitacao
+        LEFT JOIN administradores a ON a.id=e.autor
+        WHERE (%s OR (s.status='APROVADA' AND lower(s.tipo) IN ('saida','saída')))
+        AND (s.protocolo ILIKE %s OR s.declarado->>'aluno' ILIKE %s OR s.declarado->>'matricula' ILIKE %s)
+        ORDER BY e.id DESC""", (not restricted(),term,term,term))
+    for row in rows["itens"]:
+        row["quando"] = instant(row["quando"])
+    return rows
 
 
 @app.get("/api/auditoria")
@@ -445,7 +461,7 @@ def account():
     if not query("SELECT pg_try_advisory_xact_lock(538001) AS ok").fetchone()["ok"]:
         abort(409, "Outra edição em andamento.")
     role = value("perfil")
-    email = value("email", 254).lower()
+    usuario = value("usuario", 64).lower()
     name = value("nome")
     uid = request.json.get("id")
     active = request.json.get("ativo", True)
@@ -454,17 +470,17 @@ def account():
         abort(400, "Senha inválida.")
     if (
         role not in ROLES
-        or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email)
+        or not re.fullmatch(r"[a-z0-9._-]{1,64}", usuario)
         or type(active) != bool
         or (password or not uid)
-        and len(password) < 12
+        and len(password) < 8
     ):
-        abort(400, "Dados da conta inválidos (senha mínima de 12 caracteres).")
+        abort(400, "Dados da conta inválidos (senha mínima de 8 caracteres).")
     hashed = generate_password_hash(password) if password else None
     if uid is None:
         uid = query(
-            "INSERT INTO administradores(nome,email,perfil,ativo,senha_hash) VALUES (%s,%s,%s,%s,%s) RETURNING id",
-            (name, email, role, active, hashed),
+            "INSERT INTO administradores(nome,usuario,perfil,ativo,senha_hash) VALUES (%s,%s,%s,%s,%s) RETURNING id",
+            (name, usuario, role, active, hashed),
         ).fetchone()["id"]
         action = "Criação"
     else:
@@ -486,8 +502,8 @@ def account():
         ):
             abort(409, "É necessário manter um superusuário ativo.")
         query(
-            "UPDATE administradores SET nome=%s,email=%s,perfil=%s,ativo=%s,senha_hash=coalesce(%s,senha_hash) WHERE id=%s",
-            (name, email, role, active, hashed, uid),
+            "UPDATE administradores SET nome=%s,usuario=%s,perfil=%s,ativo=%s,senha_hash=coalesce(%s,senha_hash) WHERE id=%s",
+            (name, usuario, role, active, hashed, uid),
         )
         query("DELETE FROM sessoes WHERE funcionario=%s", (uid,))
         action = "Alteração"
