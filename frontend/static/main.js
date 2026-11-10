@@ -71,6 +71,13 @@ if ($("pedido")) {
     $("recibo").textContent =
       "Solicitação salva. Guarde este código para consultar seu pedido. O envio ainda não autoriza a saída.\nCódigo de consulta: " +
       result.codigo;
+    $("rastrear").elements.codigo.value = result.codigo;
+    $("copiar").hidden = false;
+    $("copiar").onclick = () =>
+      run(async () => {
+        await navigator.clipboard.writeText(result.codigo);
+        $("aviso").textContent = "Código copiado.";
+      });
     form.reset();
     form.origem.onchange();
     $("recibo").focus();
@@ -97,7 +104,9 @@ if ($("pedido")) {
       location.reload();
     });
   bind("filtro", () => list());
-  $("conta").onreset = () => { $("conta").elements.id.value = ""; };
+  $("conta").onreset = () => {
+    $("conta").elements.id.value = "";
+  };
   bind("filtro-contas", () => audit());
   bind("conta", async (body) => {
     body.ativo = $("conta").elements.ativo.checked;
@@ -134,12 +143,19 @@ async function list(page = 1) {
   if (!r.itens.length) node(el, "p", "Nenhuma solicitação encontrada.");
   for (const item of r.itens) {
     const line = node(el, "article");
-    node(line, "strong", item.aluno + " · " + item.protocolo);
-    node(
+    line.className = "record";
+    const name = node(line, "div");
+    node(name, "strong", item.aluno);
+    node(name, "small", item.protocolo);
+    const status = node(
       line,
-      "p",
-      item.status + (item.status === "APROVADA" ? " · " + item.etapa : ""),
+      "span",
+      item.status === "APROVADA"
+        ? item.status + " · " + item.etapa
+        : item.status,
     );
+    status.className = "badge";
+    status.dataset.status = item.status;
     button(line, "Abrir detalhes", () => detail(item.id));
   }
   pager(el, page, r.mais, list);
@@ -150,6 +166,17 @@ async function detail(id, page = 1) {
   el.hidden = false;
   el.replaceChildren();
   node(el, "h2", "Solicitação " + r.protocolo);
+  const labels = {
+    aluno: "Estudante",
+    matricula: "Matrícula",
+    responsavel: "Responsável",
+    cpf: "CPF",
+    parentesco: "Parentesco",
+    telefone: "Telefone",
+    origem: "Solicitante",
+  };
+  const facts = node(el, "dl");
+  facts.className = "facts";
   for (const [k, v] of Object.entries({
     ...r.declarado,
     tipo: r.tipo,
@@ -160,7 +187,11 @@ async function detail(id, page = 1) {
     etapa: r.etapa,
     mensagem: r.mensagem,
   })) {
-    if (v) node(el, "p", k + " · " + v);
+    if (v) {
+      const field = node(facts, "div");
+      node(field, "dt", labels[k] || k[0].toUpperCase() + k.slice(1));
+      node(field, "dd", v);
+    }
   }
   if (r.status === "APROVADA") {
     node(el, "h3", "Conferência da saída");
@@ -169,14 +200,13 @@ async function detail(id, page = 1) {
         step === "recepção"
           ? "Recepção · conferência"
           : "Portaria · saída efetiva";
+      const check = node(el, "div");
+      check.className = "check";
+      node(check, "b", title);
       node(
-        el,
-        "p",
-        title +
-          " · " +
-          (entry
-            ? entry.nome + " · " + entry.quando
-            : "Aguardando confirmação"),
+        check,
+        "small",
+        entry ? entry.nome + " · " + entry.quando : "Aguardando confirmação",
       );
     }
   }
@@ -276,7 +306,12 @@ async function accounts(page = 1) {
   pager(el, page, r.mais, accounts);
 }
 async function audit(page = 1) {
-  const r = await api("auditoria?pagina=" + page + "&" + new URLSearchParams(fields($("filtro-contas")))),
+  const r = await api(
+      "auditoria?pagina=" +
+        page +
+        "&" +
+        new URLSearchParams(fields($("filtro-contas"))),
+    ),
     el = $("audit");
   el.replaceChildren();
   if (!r.itens.length) node(el, "p", "Nenhum evento encontrado.");
@@ -288,4 +323,3 @@ async function audit(page = 1) {
     );
   pager(el, page, r.mais, audit);
 }
-
