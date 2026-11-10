@@ -54,6 +54,13 @@ function pager(parent, page, more, load) {
 }
 if ($("pedido")) {
   const form = $("pedido");
+  function movementGuide() {
+    const entry = form.elements.tipo.value === "Entrada";
+    $("guia-entrada").hidden = !entry;
+    $("guia-saida").hidden = entry;
+  }
+  form.querySelectorAll("[name=tipo]").forEach(radio => radio.addEventListener("change", movementGuide));
+  movementGuide();
   form.origem.onchange = () => {
     $("familia").hidden = $("familia").disabled =
       form.origem.value !== "Responsável";
@@ -69,11 +76,17 @@ if ($("pedido")) {
   bind("pedido", async (body) => {
     const result = await api("solicitar", body);
     $("recibo").textContent =
-      "Solicitação salva. Guarde o protocolo e o código secreto para consultar. O envio ainda não autoriza a saída.\nProtocolo: " +
-      result.protocolo +
-      "\nCódigo secreto: " +
+      ("Solicitação salva. " + (body.tipo === "Entrada" ? "Pedido de entrada recebido." : "O envio ainda não autoriza a saída.")) + " Guarde seu código.\nCódigo de consulta: " +
       result.codigo;
+    $("rastrear").elements.codigo.value = result.codigo;
+    $("copiar").hidden = false;
+    $("copiar").onclick = () =>
+      run(async () => {
+        await navigator.clipboard.writeText(result.codigo);
+        $("aviso").textContent = "Código copiado.";
+      });
     form.reset();
+    movementGuide();
     form.origem.onchange();
     $("recibo").focus();
   });
@@ -81,6 +94,7 @@ if ($("pedido")) {
     $("resultado").textContent = "";
     const r = await api("consulta", body);
     $("resultado").textContent = [
+      r.tipo,
       r.status,
       r.status === "APROVADA" ? r.etapa : "",
       r.mensagem,
@@ -99,17 +113,42 @@ if ($("pedido")) {
       location.reload();
     });
   bind("filtro", () => list());
-  $("conta").onreset = () => { $("conta").elements.id.value = ""; };
+  const sections = {pedidos:"area-pedidos",historico:"historico-pedidos",equipe:"admin"};
+  for (const [area,panel] of Object.entries(sections)) {
+    $("ver-"+area).onclick = () => run(async () => {
+      for (const [key,id] of Object.entries(sections)) {
+        $(id).hidden = key !== area;
+        $("ver-"+key).setAttribute("aria-pressed", String(key === area));
+      }
+      if (area === "equipe") await accounts();
+      if (area === "historico") await requestHistory();
+    });
+  }
+  bind("buscar-historico", () => requestHistory());
+  $("adicionar").onclick = () => editAccount();
+  $("cancelar").onclick = () => $("editor").close();
+  $("conta").elements.perfil.onchange = roleHelp;
+  bind("buscar-equipe", () => accounts());
   bind("filtro-contas", () => audit());
+  document.querySelector(".audit-box").ontoggle = (e) => {
+    if (e.target.open) run(() => audit());
+  };
   bind("conta", async (body) => {
+    const editing = Boolean(body.id);
     body.ativo = $("conta").elements.ativo.checked;
-    if (body.id) body.id = Number(body.id);
+    if (editing) body.id = Number(body.id);
     else delete body.id;
-    await api("contas", body);
-    $("conta").reset();
+    try {
+      await api("contas", body);
+    } catch (error) {
+      $("erro-conta").textContent = error.message;
+      return;
+    }
+    $("editor").close();
+    if (body.id === user.id) { location.reload(); return; }
     await accounts();
-    await audit();
-    $("aviso").textContent = "Conta salva.";
+    if (document.querySelector(".audit-box").open) await audit();
+    $("aviso").textContent = editing ? "Alterações salvas." : "Funcionário adicionado.";
   });
   run(async () => {
     const response = await fetch("/api/me");
@@ -120,11 +159,8 @@ if ($("pedido")) {
     $("painel").hidden = false;
     $("perfil").textContent = "Painel de " + user.perfil + " · " + user.nome;
     await list();
-    if (user.perfil === "superusuário") {
-      $("admin").hidden = false;
-      await accounts();
-      await audit();
-    }
+    $("areas").hidden = false;
+    $("ver-equipe").hidden = user.perfil !== "superusuário";
   });
 }
 async function list(page = 1) {
@@ -136,12 +172,19 @@ async function list(page = 1) {
   if (!r.itens.length) node(el, "p", "Nenhuma solicitação encontrada.");
   for (const item of r.itens) {
     const line = node(el, "article");
-    node(line, "strong", item.aluno + " · " + item.protocolo);
-    node(
+    line.className = "record";
+    const name = node(line, "div");
+    node(name, "strong", item.aluno);
+    node(name, "small", item.tipo + " · " + item.protocolo);
+    const status = node(
       line,
-      "p",
-      item.status + (item.status === "APROVADA" ? " · " + item.etapa : ""),
+      "span",
+      item.status === "APROVADA"
+        ? item.status + " · " + item.etapa
+        : item.status,
     );
+    status.className = "badge";
+    status.dataset.status = item.status;
     button(line, "Abrir detalhes", () => detail(item.id));
   }
   pager(el, page, r.mais, list);
@@ -152,6 +195,17 @@ async function detail(id, page = 1) {
   el.hidden = false;
   el.replaceChildren();
   node(el, "h2", "Solicitação " + r.protocolo);
+  const labels = {
+    aluno: "Estudante",
+    matricula: "Matrícula",
+    responsavel: "Responsável",
+    cpf: "CPF",
+    parentesco: "Parentesco",
+    telefone: "Telefone",
+    origem: "Solicitante",
+  };
+  const facts = node(el, "dl");
+  facts.className = "facts";
   for (const [k, v] of Object.entries({
     ...r.declarado,
     tipo: r.tipo,
@@ -162,23 +216,26 @@ async function detail(id, page = 1) {
     etapa: r.etapa,
     mensagem: r.mensagem,
   })) {
-    if (v) node(el, "p", k + " · " + v);
+    if (v) {
+      const field = node(facts, "div");
+      node(field, "dt", labels[k] || k[0].toUpperCase() + k.slice(1));
+      node(field, "dd", v);
+    }
   }
-  if (r.status === "APROVADA") {
+  if (r.status === "APROVADA" && ["saida","saída"].includes(r.tipo.toLowerCase())) {
     node(el, "h3", "Conferência da saída");
     for (const [step, entry] of Object.entries(r.confirmacoes)) {
       const title =
         step === "recepção"
           ? "Recepção · conferência"
           : "Portaria · saída efetiva";
+      const check = node(el, "div");
+      check.className = "check";
+      node(check, "b", title);
       node(
-        el,
-        "p",
-        title +
-          " · " +
-          (entry
-            ? entry.nome + " · " + entry.quando
-            : "Aguardando confirmação"),
+        check,
+        "small",
+        entry ? entry.nome + " · " + entry.quando : "Aguardando confirmação",
       );
     }
   }
@@ -256,29 +313,59 @@ async function detail(id, page = 1) {
   pager(el, page, r.historico.mais, (p) => detail(id, p));
   el.scrollIntoView();
 }
-async function accounts(page = 1) {
-  const r = await api("contas?pagina=" + page),
-    el = $("contas");
-  el.replaceChildren();
-  for (const a of r.itens) {
-    const line = node(
-      el,
-      "article",
-      a.nome + " · " + a.perfil + " · " + (a.ativo ? "Ativa" : "Inativa") + " ",
-    );
-    button(line, "Editar", () => {
-      const f = $("conta");
-      f.reset();
-      for (const k of ["id", "nome", "email", "perfil"])
-        f.elements[k].value = a[k];
-      f.elements.ativo.checked = a.ativo;
-      f.elements.nome.focus();
-    });
+function roleHelp() {
+  const descriptions = {
+    "coordenação": "Analisa solicitações e decide sobre as saídas.",
+    "recepção": "Confere autorizações de saída aprovadas.",
+    "portaria": "Registra a saída após a conferência da recepção.",
+    "superusuário": "Gerencia funcionários, permissões e análises."
+  };
+  $("ajuda-perfil").textContent = descriptions[$("conta").elements.perfil.value];
+}
+function editAccount(account) {
+  const f = $("conta");
+  f.reset();
+  f.elements.id.value = account?.id || "";
+  if (account) {
+    for (const key of ["nome","usuario","perfil"]) f.elements[key].value = account[key];
   }
-  pager(el, page, r.mais, accounts);
+  f.elements.ativo.checked = account ? account.ativo : true;
+  $("estado-conta").hidden = !account;
+  f.elements.senha.required = !account;
+  $("titulo-conta").textContent = account ? "Editar funcionário" : "Adicionar funcionário";
+  $("rotulo-senha").textContent = account ? "Nova senha (opcional)" : "Senha de acesso";
+  $("ajuda-senha").textContent = account ? "Deixe em branco para manter a senha atual." : "Use pelo menos 8 caracteres.";
+  $("salvar").textContent = account ? "Salvar alterações" : "Criar conta";
+  $("erro-conta").textContent = "";
+  roleHelp();
+  $("editor").showModal();
+  f.elements.nome.focus();
+}
+async function accounts(page = 1) {
+  const params = new URLSearchParams(fields($("buscar-equipe")));
+  params.set("pagina",page);
+  const r = await api("contas?"+params), el = $("contas");
+  el.replaceChildren();
+  if (!r.itens.length) node(el,"p","Nenhum funcionário encontrado.");
+  for (const a of r.itens) {
+    const line = node(el,"article");
+    line.className = "person";
+    const identity = node(line,"div");
+    node(identity,"strong",a.nome);
+    node(identity,"small",a.usuario);
+    node(line,"span",a.perfil).className="role-name";
+    node(line,"span",a.ativo ? "Ativo" : "Inativo").className="access-state "+(a.ativo?"enabled":"");
+    button(line,"Editar",()=>editAccount(a)).setAttribute("aria-label","Editar "+a.nome);
+  }
+  pager(el,page,r.mais,accounts);
 }
 async function audit(page = 1) {
-  const r = await api("auditoria?pagina=" + page + "&" + new URLSearchParams(fields($("filtro-contas")))),
+  const r = await api(
+      "auditoria?pagina=" +
+        page +
+        "&" +
+        new URLSearchParams(fields($("filtro-contas"))),
+    ),
     el = $("audit");
   el.replaceChildren();
   if (!r.itens.length) node(el, "p", "Nenhum evento encontrado.");
@@ -291,3 +378,17 @@ async function audit(page = 1) {
   pager(el, page, r.mais, audit);
 }
 
+async function requestHistory(page = 1) {
+  const params = new URLSearchParams(fields($("buscar-historico")));
+  params.set("pagina",page);
+  const r = await api("historico?"+params), el = $("eventos-pedidos");
+  el.replaceChildren();
+  if (!r.itens.length) node(el,"p","Nenhum registro encontrado.");
+  for (const e of r.itens) {
+    const line = node(el,"article");
+    node(line,"strong",e.aluno+" · "+e.tipo);
+    node(line,"p",e.acao+(e.autor?" · "+e.autor:""));
+    node(line,"small",e.quando+" · "+e.protocolo);
+  }
+  pager(el,page,r.mais,requestHistory);
+}

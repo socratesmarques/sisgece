@@ -1,5 +1,5 @@
 import hashlib
-import hmac
+from ipaddress import ip_address
 import os
 import re
 import secrets
@@ -101,19 +101,57 @@ def digest(v):
     return hashlib.sha256(v.encode()).hexdigest()
 
 
+PROXY_SECRET = os.environ.get("SISGECE_PROXY_SECRET", "")
+if PROXY_SECRET and len(PROXY_SECRET) < 32:
+    raise RuntimeError("SISGECE_PROXY_SECRET requer pelo menos 32 caracteres.")
+
+
+def client_address():
+    # Caddy overwrites both private headers. Ignore untrusted forwarding chains.
+    provided = request.headers.get("X-SISGECE-Proxy", "")
+    if PROXY_SECRET and secrets.compare_digest(provided.encode(), PROXY_SECRET.encode()):
+        try:
+            return str(ip_address(request.headers.get("X-SISGECE-Client", "")))
+        except ValueError:
+            pass
+    return request.remote_addr or "unknown"
+
+
+def increment(conn, key):
+    return conn.execute("""INSERT INTO limites VALUES (%s,floor(extract(epoch FROM now())/600),1)
+        ON CONFLICT(chave) DO UPDATE SET quantidade=CASE WHEN limites.janela=excluded.janela
+        THEN limites.quantidade+1 ELSE 1 END, janela=excluded.janela RETURNING quantidade""",
+        (key,)).fetchone()[0]
+
+
+def expire_counters(conn):
+    conn.execute("DELETE FROM limites WHERE janela < floor(extract(epoch FROM now())/600)-1")
+
+
+def limited():
+    abort(429, "Limite de tentativas. Tente novamente em dez minutos.")
+
+
 def limit(kind, maximum):
-    key = digest(kind + ":" + request.remote_addr)
     with psycopg.connect() as conn:
-        conn.execute(
-            "DELETE FROM limites WHERE janela < floor(extract(epoch FROM now())/600)-1"
-        )
-        n = conn.execute(
-            """INSERT INTO limites VALUES (%s,floor(extract(epoch FROM now())/600),1)
-            ON CONFLICT(chave) DO UPDATE SET quantidade=CASE WHEN limites.janela=excluded.janela THEN limites.quantidade+1 ELSE 1 END, janela=excluded.janela RETURNING quantidade""",
-            (key,),
-        ).fetchone()[0]
-    if n > maximum:
-        abort(429, "Limite de tentativas. Tente novamente em dez minutos.")
+        expire_counters(conn)
+        count = increment(conn, digest(kind + ":" + client_address()))
+    if count > maximum:
+        limited()
+
+
+def check_login_budget(username):
+    address = client_address()
+    pair = digest("login-pair:" + address + ":" + username)
+    source = digest("login-source:" + address)
+    # Serialize checks for this client; a failed-login transaction is recorded
+    # before releasing the lock, even though the HTTP request returns 401.
+    query("SELECT pg_advisory_xact_lock(%s)", (int(source[:15], 16),))
+    if query("""SELECT 1 FROM limites WHERE janela=floor(extract(epoch FROM now())/600)
+        AND ((chave=%s AND quantidade>=15) OR (chave=%s AND quantidade>=60))""",
+        (pair,source)).fetchone():
+        limited()
+    return pair,source
 
 
 def staff(*roles):
@@ -157,10 +195,11 @@ def ready():
 
 @app.post("/api/login")
 def login():
-    limit("login", 15)
+    username = value("usuario", 64).lower()
+    pair, source = check_login_budget(username)
     row = query(
-        "SELECT * FROM administradores WHERE lower(email)=%s AND ativo",
-        (value("email", 254).lower(),),
+        "SELECT * FROM administradores WHERE lower(usuario)=%s AND ativo",
+        (username,),
     ).fetchone()
     password = request.json.get("senha")
     if not isinstance(password, str) or not 1 <= len(password) <= 512:
@@ -175,6 +214,10 @@ def login():
         else check_password_hash(hashed, password)
     )
     if not row or not valid:
+        with psycopg.connect() as conn:
+            expire_counters(conn)
+            increment(conn, pair)
+            increment(conn, source)
         abort(401, "Credenciais inválidas.")
     token = secrets.token_urlsafe(32)
     query("DELETE FROM sessoes WHERE expira<=now()")
@@ -234,27 +277,34 @@ def submit():
             raise ValueError
     except ValueError:
         abort(400, "Data ou hora inválida.")
-    secret = secrets.token_urlsafe(24)
+    movement = request.json.get("tipo", "Saída")
+    if movement not in ("Entrada", "Saída"):
+        abort(400, "Escolha entrada ou saída.")
+    secret = "".join(secrets.choice("23456789ABCDEFGHJKLMNPQRSTUVWXYZ") for _ in range(10))
     protocol = secrets.token_hex(8).upper()
     sid = query(
-        """INSERT INTO solicitacoes(tipo,declarado,protocolo,segredo,justificativa,data_solicitada,horario_solicitado)
-        VALUES ('Saída',%s,%s,%s,%s,%s,%s) RETURNING id""",
-        (Jsonb(data), protocol, digest(secret), value("justificativa", 2000), dt, tm),
+        """INSERT INTO solicitacoes(tipo,status,etapa,declarado,protocolo,segredo,justificativa,data_solicitada,horario_solicitado)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+        (movement, "RECEBIDA" if movement=="Entrada" else "PENDENTE", None if movement=="Entrada" else "aguardando", Jsonb(data), protocol, digest(secret), value("justificativa", 2000), dt, tm),
     ).fetchone()["id"]
-    event("Envio por " + data["origem"], sid)
-    return {"protocolo": protocol, "codigo": secret}, 201
+    event(movement+" · envio por " + data["origem"], sid)
+    return {"codigo": secret[:5] + "-" + secret[5:]}, 201
 
 
 @app.post("/api/consulta")
 def track():
     limit("consulta", 40)
+    code = value("codigo", 128)
+    # Old receipts used a case-sensitive 32-character token.
+    normalized = re.sub(r"[\s-]", "", code).upper()
+    if re.fullmatch(r"[2-9A-HJ-NP-Z]{10}", normalized):
+        code = normalized
     row = query(
-        "SELECT status,etapa,mensagem,segredo FROM solicitacoes WHERE protocolo=%s",
-        (value("protocolo", 80),),
+        "SELECT tipo,status,etapa,mensagem FROM solicitacoes WHERE segredo=%s",
+        (digest(code),),
     ).fetchone()
-    secret = digest(value("codigo", 128))
-    if not row or not hmac.compare_digest(row.pop("segredo") or "", secret):
-        abort(404, "Protocolo ou código inválido.")
+    if not row:
+        abort(404, "Código de consulta inválido.")
     return row
 
 
@@ -281,7 +331,7 @@ def requests_list():
     status = request.args.get("status", "")
     day = request.args.get("data", "")
     return listing(
-        """SELECT id,protocolo,declarado->>'aluno' AS aluno,status,etapa FROM solicitacoes
+        """SELECT id,tipo,protocolo,declarado->>'aluno' AS aluno,status,etapa FROM solicitacoes
         WHERE (protocolo ILIKE %s OR declarado->>'aluno' ILIKE %s OR declarado->>'matricula' ILIKE %s)
         AND (%s='' OR status=%s) AND (%s='' OR data_solicitada::text=%s)
         AND (%s OR (status='APROVADA' AND lower(tipo) IN ('saida','saída'))) ORDER BY id DESC""",
@@ -352,7 +402,7 @@ def act(sid):
     if not row:
         abort(404)
     if row["tipo"].lower() not in ("saida", "saída"):
-        abort(409, "Registro histórico de outro tipo.")
+        abort(409, "Esta ação é exclusiva para solicitações de saída.")
     status, stage = row["status"], row["etapa"]
     note = value("nota", 2000, False)
     if action in ("aprovar", "reprovar") and status == "PENDENTE":
@@ -413,9 +463,26 @@ def act(sid):
 @app.get("/api/contas")
 @staff("superusuário")
 def accounts():
+    term = "%" + request.args.get("q", "")[:200] + "%"
     return listing(
-        "SELECT id,nome,email,ativo,perfil FROM administradores ORDER BY id", ()
+        "SELECT id,nome,usuario,ativo,perfil FROM administradores WHERE nome ILIKE %s OR usuario ILIKE %s ORDER BY lower(nome),id", (term,term)
     )
+
+
+@app.get("/api/historico")
+@staff()
+def request_history():
+    term = "%" + request.args.get("q", "")[:200] + "%"
+    rows = listing("""SELECT s.protocolo,s.tipo,s.declarado->>'aluno' AS aluno,
+        e.acao,e.quando,a.nome AS autor FROM eventos e
+        JOIN solicitacoes s ON s.id=e.solicitacao
+        LEFT JOIN administradores a ON a.id=e.autor
+        WHERE (%s OR (s.status='APROVADA' AND lower(s.tipo) IN ('saida','saída')))
+        AND (s.protocolo ILIKE %s OR s.declarado->>'aluno' ILIKE %s OR s.declarado->>'matricula' ILIKE %s)
+        ORDER BY e.id DESC""", (not restricted(),term,term,term))
+    for row in rows["itens"]:
+        row["quando"] = instant(row["quando"])
+    return rows
 
 
 @app.get("/api/auditoria")
@@ -438,7 +505,7 @@ def account():
     if not query("SELECT pg_try_advisory_xact_lock(538001) AS ok").fetchone()["ok"]:
         abort(409, "Outra edição em andamento.")
     role = value("perfil")
-    email = value("email", 254).lower()
+    usuario = value("usuario", 64).lower()
     name = value("nome")
     uid = request.json.get("id")
     active = request.json.get("ativo", True)
@@ -447,17 +514,17 @@ def account():
         abort(400, "Senha inválida.")
     if (
         role not in ROLES
-        or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email)
+        or not re.fullmatch(r"[a-z0-9._-]{1,64}", usuario)
         or type(active) != bool
         or (password or not uid)
-        and len(password) < 12
+        and len(password) < 8
     ):
-        abort(400, "Dados da conta inválidos (senha mínima de 12 caracteres).")
+        abort(400, "Dados da conta inválidos (senha mínima de 8 caracteres).")
     hashed = generate_password_hash(password) if password else None
     if uid is None:
         uid = query(
-            "INSERT INTO administradores(nome,email,perfil,ativo,senha_hash) VALUES (%s,%s,%s,%s,%s) RETURNING id",
-            (name, email, role, active, hashed),
+            "INSERT INTO administradores(nome,usuario,perfil,ativo,senha_hash) VALUES (%s,%s,%s,%s,%s) RETURNING id",
+            (name, usuario, role, active, hashed),
         ).fetchone()["id"]
         action = "Criação"
     else:
@@ -479,8 +546,8 @@ def account():
         ):
             abort(409, "É necessário manter um superusuário ativo.")
         query(
-            "UPDATE administradores SET nome=%s,email=%s,perfil=%s,ativo=%s,senha_hash=coalesce(%s,senha_hash) WHERE id=%s",
-            (name, email, role, active, hashed, uid),
+            "UPDATE administradores SET nome=%s,usuario=%s,perfil=%s,ativo=%s,senha_hash=coalesce(%s,senha_hash) WHERE id=%s",
+            (name, usuario, role, active, hashed, uid),
         )
         query("DELETE FROM sessoes WHERE funcionario=%s", (uid,))
         action = "Alteração"

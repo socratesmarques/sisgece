@@ -1,6 +1,8 @@
-# Execute Caddy no host com o domínio apontado para este servidor.
-# Substitua sisgece.exemplo.com pelo domínio real e libere 80/443.
+# Configure o domínio institucional e SISGECE_PROXY_SECRET no serviço Caddy.
 sisgece.exemplo.com {
     encode zstd gzip
-    reverse_proxy 127.0.0.1:8004
+    reverse_proxy 127.0.0.1:8004 {
+        header_up X-SISGECE-Client {http.request.remote.host}
+        header_up X-SISGECE-Proxy {env.SISGECE_PROXY_SECRET}
+    }
 }

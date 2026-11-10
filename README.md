@@ -1,6 +1,6 @@
 # SISGECE · IFCE Campus Maranguape
 
-Sistema de Gerenciamento de Entrada e Saída de Estudantes. Esta versão acompanha saídas pontuais. Na página inicial, aluno ou responsável informa os dados declarados e recebe um protocolo e um código secreto. Guarde ambos. O recibo indica que o pedido foi salvo. A coordenação verifica identidade, filiação e autorização pelos procedimentos institucionais antes de decidir.
+Sistema de Gerenciamento de Entrada e Saída de Estudantes. O formulário recebe pedidos de entrada e de saída. A entrada fica com situação RECEBIDA, disponível para consulta pelo código e visível à coordenação. O registro não atesta entrada física. A aprovação e as conferências da recepção e portaria aplicam-se às saídas. Na página inicial, aluno ou responsável informa os dados declarados e recebe um código de consulta de dez caracteres. Guarde-o e compartilhe apenas com quem deve acompanhar o pedido. A consulta aceita letras minúsculas e o hífen é opcional. Para recibos anteriores à migração 003, use o código secreto original, respeitando maiúsculas e minúsculas. O recibo indica que o pedido foi salvo. A coordenação verifica identidade, filiação e autorização pelos procedimentos institucionais antes de decidir.
 
 Em **Área do funcionário**, a coordenação pode buscar, analisar, escrever mensagem pública e manter observações internas. A recepção confere a autorização aprovada. A portaria registra a saída efetiva depois da recepção. Cada confirmação identifica o funcionário e o instante no histórico. O superusuário administra contas e análises. As confirmações operacionais exigem o perfil da etapa. Reabrir uma análise invalida as duas etapas; corrigir a recepção também invalida a portaria. Os eventos anteriores permanecem disponíveis.
 
@@ -44,11 +44,13 @@ docker run -d --name sisgece-app --network sisgece-net --restart unless-stopped 
 
 **Servidor Linux da rede interna** (com HTTPS). A aplicação usa cookies Secure por padrão. Configure no DNS interno o nome do servidor, ajuste o domínio em deploy/Caddyfile e configure o Caddy no host para encaminhar ao endereço abaixo. Use certificado institucional ou CA interna confiável nas estações. Libere a porta 443 para a rede autorizada e mantenha PostgreSQL e a porta 8004 privados. Não use LOCAL_HTTP em produção.
 
+Para distinguir as estações, gere um segredo com `openssl rand -hex 32`. Configure o mesmo valor de `SISGECE_PROXY_SECRET` no app.env.local e no ambiente do serviço Caddy (por exemplo, um EnvironmentFile com acesso restrito). O Caddyfile substitui os cabeçalhos privados pelo endereço da conexão e pela credencial do proxy. Nunca inclua essa credencial nos logs. Se o segredo estiver ausente ou for diferente, os limites usam o endereço da conexão direta, que pode ser compartilhado pelo campus. Esta configuração pressupõe um único proxy de borda; valide a origem observada se houver NAT ou outro intermediário.
+
 ```sh
 docker run -d --name sisgece-app --network sisgece-net --restart unless-stopped --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges --env-file app.env.local -p 127.0.0.1:8004:3000 sisgece:python
 ```
 
-Crie explicitamente o primeiro superusuário e informe nome, e-mail e senha no terminal interativo.
+Crie explicitamente o primeiro superusuário e informe nome, usuário e senha (mínimo de 8 caracteres) no terminal interativo.
 
 ```sh
 docker exec -it sisgece-app python backend/manage.py superuser
@@ -60,7 +62,7 @@ Abra http://localhost:8004 no teste local ou o domínio HTTPS no servidor. Entre
 
 Pare a aplicação antiga antes da migração. Identifique o banco, versão principal do PostgreSQL, rede e volume existentes com `docker inspect sisgece-db`. Mantenha esse banco e suas credenciais. Criar outro volume fará a instalação parecer vazia. Faça backup e ensaie a restauração antes da atualização. Use o procedimento de backup abaixo com os nomes reais do banco e usuário.
 
-A inicialização aplica os scripts numerados de db em uma transação protegida por bloqueio. A tabela versoes controla reaplicações. A migração mantém IDs, estudantes, responsáveis, vínculos institucionais, datas e decisões. Copia os dados disponíveis no legado para consulta interna, com protocolo LEG-id. Como nenhum segredo foi entregue originalmente, esses registros ficam disponíveis somente à equipe. Tipos antigos diferentes de saída permanecem históricos. As contas antigas mantêm o estado ativo e o hash bcrypt e passam a coordenação. Crie uma conta distinta pelo comando superuser e revise os perfis. Sessões antigas exigem novo login.
+A inicialização aplica os scripts numerados de db em uma transação protegida por bloqueio. A tabela versoes controla reaplicações. A migração mantém IDs, estudantes, responsáveis, vínculos institucionais, datas e decisões. Copia os dados disponíveis no legado para consulta interna, com protocolo LEG-id. Como nenhum segredo foi entregue originalmente, esses registros ficam disponíveis somente à equipe. Tipos antigos diferentes de saída permanecem históricos. As contas antigas mantêm o estado ativo e o hash bcrypt e passam a coordenação. Crie uma conta distinta pelo comando superuser e revise os perfis. Na migração 005, o usuário é derivado da parte anterior ao @ do e-mail, em minúsculas. Nomes repetidos recebem sufixo numérico. Confira o identificador no diretório de funcionários ou com SELECT id,nome,usuario FROM administradores. As senhas existentes são preservadas. O histórico de solicitações fica na aba Histórico da área da equipe, com visibilidade limitada ao perfil. Sessões antigas exigem novo login.
 
 Construa a imagem com outra etiqueta, pare e renomeie apenas o contêiner da aplicação, depois repita o comando docker run correspondente apontando para a imagem nova e o mesmo banco. Exemplo:
 
@@ -101,4 +103,4 @@ python -m playwright install chromium
 python tests/browser.py
 ```
 
-A CI exercita PostgreSQL 17, a imagem Docker e Chromium. O navegador usa apenas arquivos locais ao servidor. O limite de tentativas é compartilhado no banco por endereço de conexão, em janelas de dez minutos. Atrás de proxy, clientes do mesmo proxy compartilham esse limite. A aplicação ignora cabeçalhos de IP enviados pelo cliente.
+A CI exercita PostgreSQL 17, a imagem Docker e Chromium. O navegador usa apenas arquivos locais ao servidor. Os limites usam janelas de dez minutos no PostgreSQL. Logins corretos não consomem tentativas. Após 15 falhas para o mesmo usuário e origem, novas tentativas dessa combinação são bloqueadas até a janela virar; após 60 falhas da mesma origem, o bloqueio vale para todos os usuários dessa origem. Formulário e consulta têm contadores independentes.

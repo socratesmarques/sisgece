@@ -1,3 +1,4 @@
+import re
 import getpass
 import os
 import sys
@@ -31,19 +32,19 @@ if __name__ == "__main__":
         migrate()
     elif sys.argv[1:] == ["superuser"]:
         nome = input("Nome: ").strip()
-        email = input("Email: ").strip().lower()
-        senha = getpass.getpass("Senha (mínimo 12 caracteres): ")
+        usuario = input("Usuário: ").strip().lower()
+        senha = getpass.getpass("Senha (mínimo 8 caracteres): ")
         if (
             not nome
-            or "@" not in email
-            or len(senha) < 12
+            or not re.fullmatch(r"[a-z0-9._-]{1,64}", usuario)
+            or len(senha) < 8
             or senha != getpass.getpass("Repita a senha: ")
         ):
             sys.exit("Dados inválidos.")
         with psycopg.connect() as db:
             uid = db.execute(
-                "INSERT INTO administradores(nome,email,senha_hash,perfil) VALUES (%s,%s,%s,'superusuário') RETURNING id",
-                (nome, email, generate_password_hash(senha)),
+                "INSERT INTO administradores(nome,usuario,senha_hash,perfil) VALUES (%s,%s,%s,'superusuário') RETURNING id",
+                (nome, usuario, generate_password_hash(senha)),
             ).fetchone()[0]
             db.execute(
                 "INSERT INTO eventos(autor,acao) VALUES (%s,'Criação administrativa pelo operador')",
