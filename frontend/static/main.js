@@ -69,9 +69,7 @@ if ($("pedido")) {
   bind("pedido", async (body) => {
     const result = await api("solicitar", body);
     $("recibo").textContent =
-      "Solicitação salva. Guarde o protocolo e o código secreto para consultar. O envio ainda não autoriza a saída.\nProtocolo: " +
-      result.protocolo +
-      "\nCódigo secreto: " +
+      "Solicitação salva. Guarde este código para consultar seu pedido. O envio ainda não autoriza a saída.\nCódigo de consulta: " +
       result.codigo;
     form.reset();
     form.origem.onchange();

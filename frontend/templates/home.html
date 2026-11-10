@@ -5,7 +5,7 @@
 {% macro campo(nome,label,tipo='text',max=200,extra='') %}<label>{{label}}<input name="{{nome}}" type="{{tipo}}" maxlength="{{max}}" required {{extra|safe}}></label>{% endmacro %}
 {% if not equipe %}
 <div class="hero"><div class="intro"><p class="system-name">Sistema de Gerenciamento de Entrada e Saída de Estudantes</p>
-<h1>Saída de<br>estudantes</h1><p class="lead">Solicite a saída do campus e acompanhe a decisão da coordenação pelo protocolo.</p>
+<h1>Saída de<br>estudantes</h1><p class="lead">Solicite a saída do campus e acompanhe a decisão da coordenação com seu código.</p>
 <div class="actions"><a class="primary" href="#solicitar">Solicitar saída <span aria-hidden="true">↓</span></a><a href="#consulta">Consultar andamento</a></div></div>
 <div class="print" aria-hidden="true"><div class="sun"></div><div class="ridge far"></div><div class="ridge near"></div><div class="campus"><i></i><i></i><i></i></div><div class="walk"></div><span>IFCE <b>/</b> Maranguape</span></div></div>
 <div class="services"><section id="solicitar"><h2>Nova solicitação</h2><p>A coordenação verificará os dados declarados. Aguarde a aprovação antes de se apresentar à recepção.</p>
@@ -14,7 +14,7 @@
 <fieldset id="familia" disabled hidden>{{campo('cpf','CPF do responsável','text',14,'pattern="[0-9]{11}|[0-9]{3}\.[0-9]{3}\.[0-9]{3}\x2d[0-9]{2}"')}}{{campo('parentesco','Grau de parentesco','text',80)}}</fieldset>
 {{campo('telefone','Telefone de contato do responsável (com DDD)','tel',25)}}{{campo('data','Data da saída','date')}}{{campo('hora','Horário da saída','time')}}
 <label>Justificativa<textarea name="justificativa" maxlength="2000" required></textarea></label><button>Enviar solicitação</button></form><div id="recibo" tabindex="-1"></div></section>
-<section id="consulta"><span class="ticket" aria-hidden="true">⌕</span><h2>Consultar andamento</h2><p>Use os dados do recibo para acompanhar seu pedido.</p><form id="rastrear">{{campo('protocolo','Protocolo')}}{{campo('codigo','Código secreto','password')}}<button>Consultar solicitação</button></form><output id="resultado"></output></section></div>
+<section id="consulta"><span class="ticket" aria-hidden="true">⌕</span><h2>Consultar andamento</h2><p>Digite o código do recibo. Se recebeu um recibo antigo, use o código secreto.</p><form id="rastrear">{{campo('codigo','Código de consulta','text',128,'autocomplete="off" spellcheck="false"')}}<button>Consultar solicitação</button></form><output id="resultado"></output></section></div>
 {% else %}
 <section id="entrada"><p class="system-name">IFCE · Campus Maranguape</p><h2>Acesso de funcionários</h2><form id="login">{{campo('email','E-mail','email',254)}}{{campo('senha','Senha','password',512)}}<button>Entrar</button></form></section>
 <div id="painel" hidden><section><button id="sair">Sair</button><h2 id="perfil"></h2><form id="filtro"><label>Protocolo, matrícula ou nome<input name="q"></label><label>Data solicitada<input type="date" name="data"></label><label>Situação<select name="status"><option value="">Todas</option><option>PENDENTE</option><option>APROVADA</option><option>REPROVADA</option></select></label><button>Buscar solicitações</button></form><div id="lista"></div></section><section id="detalhe" hidden></section>

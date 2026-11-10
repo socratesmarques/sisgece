@@ -1,6 +1,7 @@
 """Smoke de navegador em uma instalação exclusiva de testes com LOCAL_HTTP=1."""
 
 import os
+import secrets
 from playwright.sync_api import sync_playwright, expect
 
 url = os.getenv("TEST_URL", "http://127.0.0.1:8004")
@@ -14,7 +15,7 @@ with sync_playwright() as pw:
         values = dict(
             aluno="Teste navegador",
             responsavel="Responsável fictício",
-            matricula="TEST-X",
+            matricula="TEST-"+secrets.token_hex(5),
             telefone="85999999999",
             data="2030-01-21",
             hora="15:00",
@@ -28,7 +29,6 @@ with sync_playwright() as pw:
         receipt = page.locator("#recibo")
         expect(receipt).to_contain_text("Solicitação salva")
         lines = receipt.inner_text().splitlines()
-        page.locator("#rastrear [name=protocolo]").fill(lines[-2].split(": ")[1])
         page.locator("#rastrear [name=codigo]").fill(lines[-1].split(": ")[1])
         page.get_by_role("button", name="Consultar solicitação").click()
         expect(page.locator("#resultado")).to_contain_text("PENDENTE")
@@ -69,7 +69,7 @@ with sync_playwright() as pw:
         )
         page.get_by_label("Senha", exact=True).fill(password)
         page.get_by_role("button", name="Entrar").click()
-        page.locator("#filtro [name=q]").fill(lines[-2].split(": ")[1])
+        page.locator("#filtro [name=q]").fill(values["matricula"])
         page.get_by_role("button", name="Buscar solicitações").click()
         page.get_by_role("button", name="Abrir detalhes").first.click()
         if role == "coordenação":

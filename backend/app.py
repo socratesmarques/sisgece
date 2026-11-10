@@ -1,5 +1,4 @@
 import hashlib
-import hmac
 import os
 import re
 import secrets
@@ -234,7 +233,7 @@ def submit():
             raise ValueError
     except ValueError:
         abort(400, "Data ou hora inválida.")
-    secret = secrets.token_urlsafe(24)
+    secret = "".join(secrets.choice("23456789ABCDEFGHJKLMNPQRSTUVWXYZ") for _ in range(10))
     protocol = secrets.token_hex(8).upper()
     sid = query(
         """INSERT INTO solicitacoes(tipo,declarado,protocolo,segredo,justificativa,data_solicitada,horario_solicitado)
@@ -242,19 +241,23 @@ def submit():
         (Jsonb(data), protocol, digest(secret), value("justificativa", 2000), dt, tm),
     ).fetchone()["id"]
     event("Envio por " + data["origem"], sid)
-    return {"protocolo": protocol, "codigo": secret}, 201
+    return {"codigo": secret[:5] + "-" + secret[5:]}, 201
 
 
 @app.post("/api/consulta")
 def track():
     limit("consulta", 40)
+    code = value("codigo", 128)
+    # Old receipts used a case-sensitive 32-character token.
+    normalized = re.sub(r"[\s-]", "", code).upper()
+    if re.fullmatch(r"[2-9A-HJ-NP-Z]{10}", normalized):
+        code = normalized
     row = query(
-        "SELECT status,etapa,mensagem,segredo FROM solicitacoes WHERE protocolo=%s",
-        (value("protocolo", 80),),
+        "SELECT status,etapa,mensagem FROM solicitacoes WHERE segredo=%s",
+        (digest(code),),
     ).fetchone()
-    secret = digest(value("codigo", 128))
-    if not row or not hmac.compare_digest(row.pop("segredo") or "", secret):
-        abort(404, "Protocolo ou código inválido.")
+    if not row:
+        abort(404, "Código de consulta inválido.")
     return row
 
 

@@ -81,7 +81,7 @@ class Flow(unittest.TestCase):
         self.assertEqual(second.status_code, 201)
         ids = {r["protocolo"]: r["id"] for r in coord.get("/api/pedidos").json["itens"]}
         self.assertIn("LEG-1", ids)
-        path = "pedidos/" + str(ids[receipt.json["protocolo"]])
+        path = "pedidos/" + str(sorted(ids.values())[-2])
 
         def act(client, action, **kw):
             return self.post(client, path, dict(acao=action, **kw)).status_code
@@ -98,13 +98,14 @@ class Flow(unittest.TestCase):
         self.assertEqual(act(desk, "recepção"), 200)
         self.assertEqual(act(desk, "recepção"), 409)
         self.assertEqual(act(gate, "portaria"), 200)
-        lookup = self.post(public, "consulta", receipt.json)
+        self.assertEqual(set(receipt.json), {"codigo"})
+        lookup = self.post(public, "consulta", {"codigo":receipt.json["codigo"].lower().replace("-","")})
         self.assertEqual(
             lookup.json, dict(etapa="saída concluída", status="APROVADA", mensagem="")
         )
         self.assertEqual(
             self.post(
-                public, "consulta", dict(receipt.json, codigo=second.json["codigo"])
+                public, "consulta", {"codigo": "invalido"}
             ).status_code,
             404,
         )
@@ -115,7 +116,7 @@ class Flow(unittest.TestCase):
         self.assertEqual(
             [e["autor"] for e in history[:3]], ["coordenação", "portaria", "recepção"]
         )
-        path = "pedidos/" + str(ids[second.json["protocolo"]])
+        path = "pedidos/" + str(max(ids.values()))
         self.assertEqual(act(coord, "reprovar"), 400)
         self.assertEqual(act(coord, "reprovar", mensagem="Dados insuficientes"), 200)
         account = dict(
