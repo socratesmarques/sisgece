@@ -47,3 +47,9 @@ sisgece-backup*.sql
 backups/
 
 browser-results/
+
+__pycache__/
+.pytest_cache/
+*.dump
+
+*.env.local
