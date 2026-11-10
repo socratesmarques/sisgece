@@ -1,1 +1,144 @@
-*{box-sizing:border-box}body{margin:0;background:#f3f6f4;color:#192d27;font:1rem/1.55 "Segoe UI",Arial,sans-serif}header{background:#174c38;color:white;padding:1rem max(5vw,1rem);display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}header strong{font-size:1.6rem}header small{font-size:.9rem;font-weight:500}nav{display:flex;gap:1rem;flex-wrap:wrap}nav a{color:white}main{max-width:58rem;margin:auto;padding:2rem 1rem 5rem}h1{font-size:clamp(3rem,9vw,5rem);letter-spacing:-.065em;line-height:1;margin:1rem 0 .4rem;color:#174c38}.subtitle{font-size:1.25rem;margin:0 0 2rem}section{padding:clamp(1rem,4vw,2rem);background:white;border-top:4px solid #28764d;margin:1.5rem 0}h2,h3{margin-top:.3rem}form,fieldset{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr));gap:1rem;align-items:end}fieldset{grid-column:1/-1;border:0;padding:0;margin:0}label{display:block;font-weight:600}input,select,textarea,button{font:inherit}input:not([type=checkbox]),select,textarea{display:block;width:100%;min-height:2.8rem;border:1px solid #82958a;border-radius:.3rem;padding:.5rem;background:white}textarea{min-height:5rem}button{border:0;border-radius:.3rem;padding:.65rem 1rem;background:#226444;color:white;cursor:pointer;margin:.2rem .3rem .2rem 0}button:disabled{opacity:.6}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #b25b00;outline-offset:2px}article{border-bottom:1px solid #ccd7d1;padding:.7rem 0;overflow-wrap:anywhere}output,#recibo{display:block;white-space:pre-line;overflow-wrap:anywhere}#aviso:not(:empty),#recibo:not(:empty){padding:1rem;background:#e3eee5}#aviso:not(:empty){position:sticky;top:0;z-index:1} [hidden]{display:none!important}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: #f3f6f4;
+  color: #192d27;
+  font:
+    1rem/1.55 "Segoe UI",
+    Arial,
+    sans-serif;
+}
+header {
+  background: #174c38;
+  color: white;
+  padding: 1rem max(5vw, 1rem);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+header strong {
+  font-size: 1.6rem;
+}
+header small {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+nav {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+nav a {
+  color: white;
+}
+main {
+  max-width: 58rem;
+  margin: auto;
+  padding: 2rem 1rem 5rem;
+}
+h1 {
+  font-size: clamp(3rem, 9vw, 5rem);
+  letter-spacing: -0.065em;
+  line-height: 1;
+  margin: 1rem 0 0.4rem;
+  color: #174c38;
+}
+.subtitle {
+  font-size: 1.25rem;
+  margin: 0 0 2rem;
+}
+section {
+  padding: clamp(1rem, 4vw, 2rem);
+  background: white;
+  border-top: 4px solid #28764d;
+  margin: 1.5rem 0;
+}
+h2,
+h3 {
+  margin-top: 0.3rem;
+}
+form,
+fieldset {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 1rem;
+  align-items: end;
+}
+fieldset {
+  grid-column: 1/-1;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+label {
+  display: block;
+  font-weight: 600;
+}
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+input:not([type="checkbox"]),
+select,
+textarea {
+  display: block;
+  width: 100%;
+  min-height: 2.8rem;
+  border: 1px solid #82958a;
+  border-radius: 0.3rem;
+  padding: 0.5rem;
+  background: white;
+}
+textarea {
+  min-height: 5rem;
+}
+button {
+  border: 0;
+  border-radius: 0.3rem;
+  padding: 0.65rem 1rem;
+  background: #226444;
+  color: white;
+  cursor: pointer;
+  margin: 0.2rem 0.3rem 0.2rem 0;
+}
+button:disabled {
+  opacity: 0.6;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #b25b00;
+  outline-offset: 2px;
+}
+article {
+  border-bottom: 1px solid #ccd7d1;
+  padding: 0.7rem 0;
+  overflow-wrap: anywhere;
+}
+output,
+#recibo {
+  display: block;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+#aviso:not(:empty),
+#recibo:not(:empty) {
+  padding: 1rem;
+  background: #e3eee5;
+}
+#aviso:not(:empty) {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+[hidden] {
+  display: none !important;
+}
