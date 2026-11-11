@@ -20,7 +20,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -r requirements.txt playwright
+      - run: pip install -r requirements.txt playwright pip-audit ruff
+      - run: ruff check backend --select F
+      - run: ruff format --check backend tests/test_flow.py
+      - run: pip-audit -r requirements.txt
       - run: python -m unittest discover -s tests -v
       - run: docker build -t sisgece:ci .
       - run: docker run -d --name web --network host -e PGHOST -e PGUSER -e PGPASSWORD -e LOCAL_HTTP sisgece:ci

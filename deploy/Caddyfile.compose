@@ -1,0 +1,7 @@
+{$SISGECE_DOMAIN} {
+    encode zstd gzip
+    reverse_proxy app:3000 {
+        header_up X-SISGECE-Client {http.request.remote.host}
+        header_up X-SISGECE-Proxy {env.SISGECE_PROXY_SECRET}
+    }
+}
