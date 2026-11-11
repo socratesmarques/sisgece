@@ -31,3 +31,12 @@ no GitHub e não é presumido aprovado.
 A consulta pública continua retornando mensagem escrita pela coordenação: a equipe
 não deve publicar dados pessoais nesse campo. A posse do recibo permite consulta
 do status; não comprova identidade nem libera histórico pessoal.
+
+## Contêiner e recuperação
+
+A primeira execução detectou permissão negada no arquivo manage.py; corrigida com
+COPY --chown para o usuário da aplicação. Build e execução repetidos com sucesso.
+Aplicação executada com filesystem somente leitura, tmpfs e capabilities removidas.
+Após reinicialização, readiness voltou a 200. Com PostgreSQL parado, readiness
+retornou 503 e liveness 200; após reinício do banco, readiness voltou a 200.
+As duas solicitações persistiram após reinicialização do PostgreSQL.
