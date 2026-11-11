@@ -1,0 +1,60 @@
+name: sisgece
+services:
+  db:
+    image: postgres:17.6-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sisgece
+      POSTGRES_USER: sisgece
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD}
+    volumes: ["dados:/var/lib/postgresql/data"]
+    networks: [interna]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sisgece -d sisgece"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: &logs
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+  app:
+    image: ${SISGECE_IMAGE:-sisgece:rc}
+    build: .
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      PGHOST: db
+      PGDATABASE: sisgece
+      PGUSER: sisgece
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD}
+      SISGECE_PROXY_SECRET: ${SISGECE_PROXY_SECRET:?Defina SISGECE_PROXY_SECRET}
+      TRACKING_TTL_DAYS: ${TRACKING_TTL_DAYS:-30}
+    depends_on:
+      db: {condition: service_healthy}
+    networks: [interna]
+    logging: *logs
+  proxy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      SISGECE_DOMAIN: ${SISGECE_DOMAIN:?Defina SISGECE_DOMAIN}
+      SISGECE_PROXY_SECRET: ${SISGECE_PROXY_SECRET:?Defina SISGECE_PROXY_SECRET}
+    volumes:
+      - ./deploy/Caddyfile.compose:/etc/caddy/Caddyfile:ro
+      - certificados:/data
+      - caddy_config:/config
+    networks: [interna, borda]
+    depends_on:
+      app: {condition: service_healthy}
+    logging: *logs
+networks:
+  interna: {internal: true}
+  borda: {}
+volumes:
+  dados: {}
+  certificados: {}
+  caddy_config: {}

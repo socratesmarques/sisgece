@@ -1,9 +1,12 @@
 import hashlib
+import json
+import logging
+import time as clock
 from ipaddress import ip_address
 import os
 import re
 import secrets
-from datetime import date, datetime, time
+from datetime import date, time
 from functools import wraps
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -23,6 +26,10 @@ app = Flask(
     static_folder=ROOT / "frontend/static",
 )
 app.config["MAX_CONTENT_LENGTH"] = 16384
+logging.basicConfig(level=logging.INFO)
+TRACK_DAYS = int(os.getenv("TRACKING_TTL_DAYS", "30"))
+if not 1 <= TRACK_DAYS <= 365:
+    raise RuntimeError("TRACKING_TTL_DAYS deve estar entre 1 e 365.")
 LOCAL = os.getenv("LOCAL_HTTP") == "1"
 ROLES = ("coordenação", "recepção", "portaria", "superusuário")
 DUMMY = generate_password_hash(secrets.token_urlsafe())
@@ -54,6 +61,19 @@ def finish(response):
     )
     if not LOCAL:
         response.headers["Strict-Transport-Security"] = "max-age=31536000"
+    app.logger.info(
+        json.dumps(
+            {
+                "event": "http",
+                "method": request.method,
+                "route": str(request.url_rule),
+                "status": response.status_code,
+                "duration_ms": round(
+                    (clock.monotonic() - g.get("started", clock.monotonic())) * 1000
+                ),
+            }
+        )
+    )
     return response
 
 
@@ -77,6 +97,7 @@ def database_error(e):
 
 @app.before_request
 def protect():
+    g.started = clock.monotonic()
     if request.method == "POST":
         # Custom header cannot be sent cross-origin without a successful CORS preflight.
         if request.headers.get("X-SISGECE") != "1" or not request.is_json:
@@ -109,7 +130,9 @@ if PROXY_SECRET and len(PROXY_SECRET) < 32:
 def client_address():
     # Caddy overwrites both private headers. Ignore untrusted forwarding chains.
     provided = request.headers.get("X-SISGECE-Proxy", "")
-    if PROXY_SECRET and secrets.compare_digest(provided.encode(), PROXY_SECRET.encode()):
+    if PROXY_SECRET and secrets.compare_digest(
+        provided.encode(), PROXY_SECRET.encode()
+    ):
         try:
             return str(ip_address(request.headers.get("X-SISGECE-Client", "")))
         except ValueError:
@@ -118,14 +141,18 @@ def client_address():
 
 
 def increment(conn, key):
-    return conn.execute("""INSERT INTO limites VALUES (%s,floor(extract(epoch FROM now())/600),1)
+    return conn.execute(
+        """INSERT INTO limites VALUES (%s,floor(extract(epoch FROM now())/600),1)
         ON CONFLICT(chave) DO UPDATE SET quantidade=CASE WHEN limites.janela=excluded.janela
         THEN limites.quantidade+1 ELSE 1 END, janela=excluded.janela RETURNING quantidade""",
-        (key,)).fetchone()[0]
+        (key,),
+    ).fetchone()[0]
 
 
 def expire_counters(conn):
-    conn.execute("DELETE FROM limites WHERE janela < floor(extract(epoch FROM now())/600)-1")
+    conn.execute(
+        "DELETE FROM limites WHERE janela < floor(extract(epoch FROM now())/600)-1"
+    )
 
 
 def limited():
@@ -147,11 +174,13 @@ def check_login_budget(username):
     # Serialize checks for this client; a failed-login transaction is recorded
     # before releasing the lock, even though the HTTP request returns 401.
     query("SELECT pg_advisory_xact_lock(%s)", (int(source[:15], 16),))
-    if query("""SELECT 1 FROM limites WHERE janela=floor(extract(epoch FROM now())/600)
+    if query(
+        """SELECT 1 FROM limites WHERE janela=floor(extract(epoch FROM now())/600)
         AND ((chave=%s AND quantidade>=15) OR (chave=%s AND quantidade>=60))""",
-        (pair,source)).fetchone():
+        (pair, source),
+    ).fetchone():
         limited()
-    return pair,source
+    return pair, source
 
 
 def staff(*roles):
@@ -185,6 +214,11 @@ def event(action, sid=None, note=None):
 @app.get("/equipe")
 def home():
     return render_template("home.html", equipe=request.path == "/equipe")
+
+
+@app.get("/api/health")
+def health():
+    return {"ok": True}
 
 
 @app.get("/api/ready")
@@ -280,14 +314,42 @@ def submit():
     movement = request.json.get("tipo", "Saída")
     if movement not in ("Entrada", "Saída"):
         abort(400, "Escolha entrada ou saída.")
-    secret = "".join(secrets.choice("23456789ABCDEFGHJKLMNPQRSTUVWXYZ") for _ in range(10))
+    reason = value("justificativa", 2000)
+    fingerprint = digest(json.dumps([data, movement, dt, tm, reason], sort_keys=True))
+    query("SELECT pg_advisory_xact_lock(%s)", (int(fingerprint[:15], 16),))
+    if query(
+        """SELECT 1 FROM solicitacoes WHERE impressao=%s
+        AND criado_em > now()-interval '10 minutes'""",
+        (fingerprint,),
+    ).fetchone():
+        abort(
+            409,
+            "Solicitação já recebida nos últimos dez minutos. Use seu recibo ou procure a coordenação.",
+        )
+    secret = "".join(
+        secrets.choice("23456789ABCDEFGHJKLMNPQRSTUVWXYZ") for _ in range(10)
+    )
     protocol = secrets.token_hex(8).upper()
     sid = query(
         """INSERT INTO solicitacoes(tipo,status,etapa,declarado,protocolo,segredo,justificativa,data_solicitada,horario_solicitado)
         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
-        (movement, "RECEBIDA" if movement=="Entrada" else "PENDENTE", None if movement=="Entrada" else "aguardando", Jsonb(data), protocol, digest(secret), value("justificativa", 2000), dt, tm),
+        (
+            movement,
+            "RECEBIDA" if movement == "Entrada" else "PENDENTE",
+            None if movement == "Entrada" else "aguardando",
+            Jsonb(data),
+            protocol,
+            digest(secret),
+            value("justificativa", 2000),
+            dt,
+            tm,
+        ),
     ).fetchone()["id"]
-    event(movement+" · envio por " + data["origem"], sid)
+    query(
+        "UPDATE solicitacoes SET impressao=%s, consulta_expira=now()+(%s * interval '1 day') WHERE id=%s",
+        (fingerprint, TRACK_DAYS, sid),
+    )
+    event(movement + " · envio por " + data["origem"], sid)
     return {"codigo": secret[:5] + "-" + secret[5:]}, 201
 
 
@@ -300,7 +362,7 @@ def track():
     if re.fullmatch(r"[2-9A-HJ-NP-Z]{10}", normalized):
         code = normalized
     row = query(
-        "SELECT tipo,status,etapa,mensagem FROM solicitacoes WHERE segredo=%s",
+        "SELECT tipo,status,etapa,mensagem FROM solicitacoes WHERE segredo=%s AND consulta_expira>now()",
         (digest(code),),
     ).fetchone()
     if not row:
@@ -465,7 +527,8 @@ def act(sid):
 def accounts():
     term = "%" + request.args.get("q", "")[:200] + "%"
     return listing(
-        "SELECT id,nome,usuario,ativo,perfil FROM administradores WHERE nome ILIKE %s OR usuario ILIKE %s ORDER BY lower(nome),id", (term,term)
+        "SELECT id,nome,usuario,ativo,perfil FROM administradores WHERE nome ILIKE %s OR usuario ILIKE %s ORDER BY lower(nome),id",
+        (term, term),
     )
 
 
@@ -473,13 +536,16 @@ def accounts():
 @staff()
 def request_history():
     term = "%" + request.args.get("q", "")[:200] + "%"
-    rows = listing("""SELECT s.protocolo,s.tipo,s.declarado->>'aluno' AS aluno,
+    rows = listing(
+        """SELECT s.protocolo,s.tipo,s.declarado->>'aluno' AS aluno,
         e.acao,e.quando,a.nome AS autor FROM eventos e
         JOIN solicitacoes s ON s.id=e.solicitacao
         LEFT JOIN administradores a ON a.id=e.autor
         WHERE (%s OR (s.status='APROVADA' AND lower(s.tipo) IN ('saida','saída')))
         AND (s.protocolo ILIKE %s OR s.declarado->>'aluno' ILIKE %s OR s.declarado->>'matricula' ILIKE %s)
-        ORDER BY e.id DESC""", (not restricted(),term,term,term))
+        ORDER BY e.id DESC""",
+        (not restricted(), term, term, term),
+    )
     for row in rows["itens"]:
         row["quando"] = instant(row["quando"])
     return rows

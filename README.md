@@ -104,3 +104,11 @@ python tests/browser.py
 ```
 
 A CI exercita PostgreSQL 17, a imagem Docker e Chromium. O navegador usa apenas arquivos locais ao servidor. Os limites usam janelas de dez minutos no PostgreSQL. Logins corretos não consomem tentativas. Após 15 falhas para o mesmo usuário e origem, novas tentativas dessa combinação são bloqueadas até a janela virar; após 60 falhas da mesma origem, o bloqueio vale para todos os usuários dessa origem. Formulário e consulta têm contadores independentes.
+
+## Candidata em revisão
+
+Consulte [auditoria e pendências](docs/AUDITORIA.md) e
+[operação com Compose](docs/OPERACAO.md). O código público expira após
+TRACKING_TTL_DAYS (30 dias por padrão); recibos anteriores recebem 30 dias a partir
+da migração 006. Reenvios idênticos em dez minutos retornam HTTP 409, inclusive
+quando simultâneos. A expiração do recibo não apaga o histórico institucional.
