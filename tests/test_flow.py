@@ -52,18 +52,59 @@ class Flow(unittest.TestCase):
     def test_login_limits_count_failures_and_ignore_spoofed_headers(self):
         client = app.test_client()
         login = {"usuario": "user0", "senha": self.password}
+
         def attempt(body, number=0, remote="192.0.2.10"):
-            return client.post("/api/login", json=body,
-                environ_overrides={"REMOTE_ADDR":remote},
-                headers={"X-SISGECE":"1", "X-Forwarded-For":f"198.51.100.{number}",
-                         "X-SISGECE-Proxy":"incorrect", "X-SISGECE-Client":f"198.51.100.{number}"}).status_code
+            return client.post(
+                "/api/login",
+                json=body,
+                environ_overrides={"REMOTE_ADDR": remote},
+                headers={
+                    "X-SISGECE": "1",
+                    "X-Forwarded-For": f"198.51.100.{number}",
+                    "X-SISGECE-Proxy": "incorrect",
+                    "X-SISGECE-Client": f"198.51.100.{number}",
+                },
+            ).status_code
+
         for _ in range(17):
-            self.assertEqual(attempt(login),200)
+            self.assertEqual(attempt(login), 200)
         for i in range(15):
-            self.assertEqual(attempt(dict(login,senha="errada"),i),401)
-        self.assertEqual(attempt(login,16),429)
-        self.assertEqual(attempt(dict(login,usuario="user1")),200)
-        self.assertEqual(attempt(login,remote="192.0.2.11"),200)
+            self.assertEqual(attempt(dict(login, senha="errada"), i), 401)
+        self.assertEqual(attempt(login, 16), 429)
+        self.assertEqual(attempt(dict(login, usuario="user1")), 200)
+        self.assertEqual(attempt(login, remote="192.0.2.11"), 200)
+
+    def test_duplicates_expiration_and_health(self):
+        form = dict(
+            origem="Aluno",
+            aluno="Fictício",
+            matricula="DUP-1",
+            responsavel="Fictício",
+            telefone="85999999999",
+            data="2030-01-01",
+            hora="12:00",
+            justificativa="Regressão",
+        )
+
+        def submit(_):
+            return self.post(app.test_client(), "solicitar", form)
+
+        with ThreadPoolExecutor(2) as pool:
+            responses = list(pool.map(submit, range(2)))
+        self.assertEqual(sorted(r.status_code for r in responses), [201, 409])
+        receipt = next(r.json for r in responses if r.status_code == 201)
+        client = app.test_client()
+        self.assertEqual(self.post(client, "consulta", receipt).status_code, 200)
+        with psycopg.connect() as db:
+            db.execute(
+                "UPDATE solicitacoes SET consulta_expira=now()-interval '1 second' WHERE declarado->>'matricula'='DUP-1'"
+            )
+        self.assertEqual(self.post(client, "consulta", receipt).status_code, 404)
+        self.assertEqual(client.get("/api/health").status_code, 200)
+        self.assertEqual(client.get("/api/ready").status_code, 200)
+        self.assertEqual(
+            self.post(client, "solicitar", dict(form, hora="invalid")).status_code, 400
+        )
 
     def test_workflow(self):
         public = app.test_client()
@@ -74,7 +115,12 @@ class Flow(unittest.TestCase):
             c = app.test_client()
             self.assertEqual(
                 self.post(
-                    c, "login", {"usuario": "user" + str(ROLES.index(role)), "senha": self.password}
+                    c,
+                    "login",
+                    {
+                        "usuario": "user" + str(ROLES.index(role)),
+                        "senha": self.password,
+                    },
                 ).status_code,
                 200,
             )
@@ -115,14 +161,17 @@ class Flow(unittest.TestCase):
         self.assertEqual(act(desk, "recepção"), 409)
         self.assertEqual(act(gate, "portaria"), 200)
         self.assertEqual(set(receipt.json), {"codigo"})
-        lookup = self.post(public, "consulta", {"codigo":receipt.json["codigo"].lower().replace("-","")})
-        self.assertEqual(
-            lookup.json, dict(tipo="Saída", etapa="saída concluída", status="APROVADA", mensagem="")
+        lookup = self.post(
+            public,
+            "consulta",
+            {"codigo": receipt.json["codigo"].lower().replace("-", "")},
         )
         self.assertEqual(
-            self.post(
-                public, "consulta", {"codigo": "invalido"}
-            ).status_code,
+            lookup.json,
+            dict(tipo="Saída", etapa="saída concluída", status="APROVADA", mensagem=""),
+        )
+        self.assertEqual(
+            self.post(public, "consulta", {"codigo": "invalido"}).status_code,
             404,
         )
         self.assertEqual(act(coord, "corrigir recepção"), 400)
@@ -135,21 +184,32 @@ class Flow(unittest.TestCase):
         path = "pedidos/" + str(max(ids.values()))
         self.assertEqual(act(coord, "reprovar"), 400)
         self.assertEqual(act(coord, "reprovar", mensagem="Dados insuficientes"), 200)
-        entry = self.post(public, "solicitar", dict(form,tipo="Entrada"))
-        self.assertEqual(entry.status_code,201)
-        self.assertEqual(self.post(public,"consulta",entry.json).json,dict(tipo="Entrada",status="RECEBIDA",etapa=None,mensagem=None))
-        path = "pedidos/"+str(coord.get("/api/pedidos?status=RECEBIDA").json["itens"][0]["id"])
-        self.assertEqual(act(coord,"aprovar"),409)
-        self.assertEqual(act(desk,"recepção"),409)
-        self.assertEqual(gate.get("/api/"+path).status_code,404)
-        self.assertEqual(self.post(public,"solicitar",dict(form,tipo="outro")).status_code,400)
-        account = dict(
-            nome="Nova", usuario="nova", perfil="recepção", senha="12345678"
+        entry = self.post(public, "solicitar", dict(form, tipo="Entrada"))
+        self.assertEqual(entry.status_code, 201)
+        self.assertEqual(
+            self.post(public, "consulta", entry.json).json,
+            dict(tipo="Entrada", status="RECEBIDA", etapa=None, mensagem=None),
         )
-        self.assertEqual(self.post(admin,"contas",dict(account,senha="1234567")).status_code,400)
-        self.assertEqual(public.get("/api/historico").status_code,401)
+        path = "pedidos/" + str(
+            coord.get("/api/pedidos?status=RECEBIDA").json["itens"][0]["id"]
+        )
+        self.assertEqual(act(coord, "aprovar"), 409)
+        self.assertEqual(act(desk, "recepção"), 409)
+        self.assertEqual(gate.get("/api/" + path).status_code, 404)
+        self.assertEqual(
+            self.post(public, "solicitar", dict(form, tipo="outro")).status_code, 400
+        )
+        account = dict(nome="Nova", usuario="nova", perfil="recepção", senha="12345678")
+        self.assertEqual(
+            self.post(admin, "contas", dict(account, senha="1234567")).status_code, 400
+        )
+        self.assertEqual(public.get("/api/historico").status_code, 401)
         self.assertTrue(coord.get("/api/historico").json["itens"])
-        self.assertFalse(any(e["tipo"]=="Entrada" for e in desk.get("/api/historico").json["itens"]))
+        self.assertFalse(
+            any(
+                e["tipo"] == "Entrada" for e in desk.get("/api/historico").json["itens"]
+            )
+        )
         self.assertEqual(self.post(coord, "contas", account).status_code, 403)
         self.assertEqual(self.post(admin, "contas", account).status_code, 200)
         accounts = admin.get("/api/contas").json["itens"]
