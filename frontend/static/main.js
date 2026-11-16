@@ -2,18 +2,27 @@ const $ = (id) => document.getElementById(id);
 const fields = (form) => Object.fromEntries(new FormData(form));
 let user;
 let pending = false;
+let selectedRequest;
 
 async function run(work) {
   if (pending) return;
   pending = true;
+  const buttons = [...document.querySelectorAll("button:not(:disabled)")];
+  buttons.forEach((button) => (button.disabled = true));
+  $("principal").setAttribute("aria-busy", "true");
+  $("aviso").dataset.kind = "loading";
   $("aviso").textContent = "Aguarde…";
   try {
     await work();
+    $("aviso").dataset.kind = "success";
     if ($("aviso").textContent === "Aguarde…") $("aviso").textContent = "";
   } catch (e) {
+    $("aviso").dataset.kind = "error";
     $("aviso").textContent = e.message;
     $("aviso").focus();
   } finally {
+    buttons.forEach((button) => { if (button.isConnected) button.disabled = false; });
+    $("principal").setAttribute("aria-busy", "false");
     pending = false;
   }
 }
@@ -49,8 +58,24 @@ function button(parent, label, fn) {
   return b;
 }
 function pager(parent, page, more, load) {
-  if (page > 1) button(parent, "Página anterior", () => load(page - 1));
-  if (more) button(parent, "Próxima página", () => load(page + 1));
+  if (page === 1 && !more) return;
+  const navigation = node(parent, "nav");
+  navigation.className = "pager";
+  navigation.setAttribute("aria-label", "Paginação");
+  if (page > 1) button(navigation, "Página anterior", () => load(page - 1));
+  if (more) button(navigation, "Próxima página", () => load(page + 1));
+}
+function statusBadge(parent, item) {
+  const status = node(parent, "span", [item.status, item.status === "APROVADA" ? item.etapa : ""].filter(Boolean).join(" · "));
+  status.className = "badge";
+  status.dataset.status = item.status;
+  return status;
+}
+function emptyState(parent, title, description) {
+  const state = node(parent, "div");
+  state.className = "empty-state";
+  node(state, "strong", title);
+  node(state, "p", description);
 }
 if ($("pedido")) {
   const form = $("pedido");
@@ -58,6 +83,12 @@ if ($("pedido")) {
     const entry = form.elements.tipo.value === "Entrada";
     $("guia-entrada").hidden = !entry;
     $("guia-saida").hidden = entry;
+    $("ajuda-movimento").textContent = entry
+      ? "A coordenação analisará o pedido. A aprovação não registra a entrada física no campus."
+      : "Aguarde a aprovação antes de seguir para a recepção.";
+    $("nota-guia").textContent = entry
+      ? "A aprovação do pedido não comprova a entrada física no campus. Siga as orientações da equipe."
+      : "Guarde o código para consultar a situação e as mensagens da equipe.";
   }
   form.querySelectorAll("[name=tipo]").forEach(radio => radio.addEventListener("change", movementGuide));
   movementGuide();
@@ -76,7 +107,7 @@ if ($("pedido")) {
   bind("pedido", async (body) => {
     const result = await api("solicitar", body);
     $("recibo").textContent =
-      ("Solicitação salva. " + (body.tipo === "Entrada" ? "Pedido de entrada recebido." : "O envio ainda não autoriza a saída.")) + " Guarde seu código.\nCódigo de consulta: " +
+      ("Solicitação salva. " + (body.tipo === "Entrada" ? "Seu pedido de entrada aguarda análise da coordenação." : "O envio ainda não autoriza a saída.")) + " Guarde seu código.\nCódigo de consulta: " +
       result.codigo;
     $("rastrear").elements.codigo.value = result.codigo;
     $("copiar").hidden = false;
@@ -93,14 +124,21 @@ if ($("pedido")) {
   bind("rastrear", async (body) => {
     $("resultado").textContent = "";
     const r = await api("consulta", body);
-    $("resultado").textContent = [
-      r.tipo,
-      r.status,
-      r.status === "APROVADA" ? r.etapa : "",
-      r.mensagem,
-    ]
-      .filter(Boolean)
-      .join(" · ");
+    const result = $("resultado");
+    node(result, "strong", "Solicitação de " + r.tipo.toLowerCase()).className = "result-title";
+    statusBadge(result, r);
+    const explanation = {
+      PENDENTE: "Seu pedido está aguardando a análise da coordenação.",
+      RECEBIDA: "Seu pedido foi recebido e aguarda análise da coordenação.",
+      REPROVADA: "Seu pedido foi recusado. Confira o motivo informado pela coordenação.",
+      APROVADA: r.tipo === "Entrada"
+        ? "Pedido de entrada aprovado. Siga as orientações da equipe; esta aprovação não registra a entrada física."
+        : r.etapa === "saída concluída" ? "A saída foi registrada pela portaria."
+          : r.etapa === "recepção confirmada" ? "Conferência da recepção concluída. Siga para a portaria."
+            : "Pedido aprovado. Apresente-se à recepção para a conferência.",
+    };
+    node(result, "span", explanation[r.status] || "Consulte as orientações da coordenação.").className = "result-description";
+    if (r.mensagem) node(result, "span", "Mensagem da coordenação: " + r.mensagem).className = "result-message";
   });
 } else {
   bind("login", async (body) => {
@@ -112,7 +150,17 @@ if ($("pedido")) {
       await api("logout", {});
       location.reload();
     });
-  bind("filtro", () => list());
+  bind("filtro", () => {
+    selectedRequest = null;
+    $("detalhe").hidden = true;
+    return list();
+  });
+  $("limpar-filtros").onclick = () => run(async () => {
+    $("filtro").reset();
+    selectedRequest = null;
+    $("detalhe").hidden = true;
+    await list();
+  });
   const sections = {pedidos:"area-pedidos",historico:"historico-pedidos",equipe:"admin"};
   for (const [area,panel] of Object.entries(sections)) {
     $("ver-"+area).onclick = () => run(async () => {
@@ -152,9 +200,10 @@ if ($("pedido")) {
   });
   run(async () => {
     const response = await fetch("/api/me");
+    const profile = await response.json();
     if (response.status === 401) return;
     if (!response.ok) throw Error("Não foi possível carregar o painel.");
-    user = await response.json();
+    user = profile;
     $("entrada").hidden = true;
     $("painel").hidden = false;
     $("perfil").textContent = "Painel de " + user.perfil + " · " + user.nome;
@@ -169,23 +218,21 @@ async function list(page = 1) {
   const r = await api("pedidos?" + p);
   const el = $("lista");
   el.replaceChildren();
-  if (!r.itens.length) node(el, "p", "Nenhuma solicitação encontrada.");
+  $("resumo-lista").textContent = r.itens.length ? `${r.itens.length}${r.mais ? "+" : ""} nesta página` : "";
+  if (!r.itens.length) emptyState(el, "Nenhuma solicitação encontrada", "Tente outro nome, matrícula ou período, ou limpe os filtros.");
   for (const item of r.itens) {
     const line = node(el, "article");
     line.className = "record";
+    line.dataset.id = item.id;
+    line.dataset.selected = String(item.id === selectedRequest);
     const name = node(line, "div");
     node(name, "strong", item.aluno);
     node(name, "small", item.tipo + " · " + item.protocolo);
-    const status = node(
-      line,
-      "span",
-      item.status === "APROVADA"
-        ? item.status + " · " + item.etapa
-        : item.status,
-    );
-    status.className = "badge";
-    status.dataset.status = item.status;
-    button(line, "Abrir detalhes", () => detail(item.id));
+    statusBadge(line, item);
+    const open = button(line, "Abrir detalhes", () => detail(item.id));
+    open.className = "secondary";
+    open.setAttribute("aria-controls", "detalhe");
+    open.setAttribute("aria-expanded", String(item.id === selectedRequest));
   }
   pager(el, page, r.mais, list);
 }
@@ -194,7 +241,23 @@ async function detail(id, page = 1) {
     el = $("detalhe");
   el.hidden = false;
   el.replaceChildren();
-  node(el, "h2", "Solicitação " + r.protocolo);
+  selectedRequest = id;
+  for (const record of $("lista").querySelectorAll(".record")) {
+    const selected = Number(record.dataset.id) === id;
+    record.dataset.selected = String(selected);
+    record.querySelector("button").setAttribute("aria-expanded", String(selected));
+  }
+  const heading = node(el, "div");
+  heading.className = "detail-heading";
+  const title = node(heading, "div");
+  node(title, "h2", "Solicitação de " + r.tipo.toLowerCase());
+  node(title, "p", "Protocolo " + r.protocolo);
+  button(heading, "Voltar à lista", async () => {
+    el.hidden = true;
+    selectedRequest = null;
+    await list();
+    $("lista").focus();
+  }).className = "secondary";
   const labels = {
     aluno: "Estudante",
     matricula: "Matrícula",
@@ -209,8 +272,8 @@ async function detail(id, page = 1) {
   for (const [k, v] of Object.entries({
     ...r.declarado,
     tipo: r.tipo,
-    data: r.data_solicitada,
-    horário: r.horario_solicitado,
+    data: r.data_solicitada ? new Intl.DateTimeFormat("pt-BR").format(new Date(r.data_solicitada + "T12:00:00")) : null,
+    horário: r.horario_solicitado?.slice(0, 5),
     justificativa: r.justificativa,
     situação: r.status,
     etapa: r.etapa,
@@ -218,6 +281,7 @@ async function detail(id, page = 1) {
   })) {
     if (v) {
       const field = node(facts, "div");
+      if (["justificativa", "mensagem"].includes(k)) field.className = "wide-fact";
       node(field, "dt", labels[k] || k[0].toUpperCase() + k.slice(1));
       node(field, "dd", v);
     }
@@ -245,49 +309,61 @@ async function detail(id, page = 1) {
     await detail(id);
     $("aviso").textContent = "Ação registrada.";
   };
-  if (
-    ["coordenação", "superusuário"].includes(user.perfil) &&
-    ["saida", "saída"].includes(r.tipo.toLowerCase())
-  ) {
-    const note = node(
-      node(el, "label", "Observação interna ou justificativa da correção"),
-      "textarea",
-    );
-    note.maxLength = 2000;
-    if (r.status === "PENDENTE") {
-      node(
-        el,
-        "p",
-        "Confira manualmente a identidade, os dados declarados e a autorização do responsável antes de decidir.",
-      );
-      const msg = node(
-        node(
-          el,
-          "label",
-          "Mensagem ao solicitante (motivo obrigatório na reprovação)",
-        ),
-        "textarea",
-      );
+  const isExit = ["saida", "saída"].includes(r.tipo.toLowerCase());
+  if (["coordenação", "superusuário"].includes(user.perfil) && (isExit || r.tipo.toLowerCase() === "entrada")) {
+    const decision = node(el, "div");
+    decision.className = "decision";
+    const awaiting = ["PENDENTE", "RECEBIDA"].includes(r.status);
+    node(decision, "h3", awaiting ? "Análise da solicitação" : "Revisão da análise");
+    node(decision, "p", awaiting
+      ? "Confira a identidade, os dados declarados e a autorização do responsável antes de decidir."
+      : isExit ? "Reabrir a análise invalida as duas confirmações. Corrigir a recepção também invalida a portaria."
+        : "A reabertura devolve o pedido de entrada para análise. O histórico da decisão anterior será preservado.");
+    const form = node(decision, "form");
+    let msg;
+    if (awaiting) {
+      const group = node(form, "div");
+      const label = node(group, "label", "Mensagem ao solicitante");
+      msg = node(label, "textarea");
+      msg.name = "mensagem";
       msg.maxLength = 2000;
-      for (const a of ["aprovar", "reprovar"])
-        button(el, a, () => send(a, { nota: note.value, mensagem: msg.value }));
-    } else {
-      node(
-        el,
-        "p",
-        "Reabrir a análise invalida as duas confirmações. Corrigir a recepção também invalida a portaria.",
-      );
-      const actions = ["reabrir análise"];
-      if (r.etapa !== "aguardando") actions.push("corrigir recepção");
-      if (r.etapa === "saída concluída") actions.push("corrigir portaria");
-      for (const a of actions)
-        button(el, a, () => send(a, { nota: note.value }));
+      msg.setAttribute("aria-describedby", "ajuda-decisao");
+      const help = node(group, "small", "Informe o motivo ao recusar. Essa mensagem fica disponível na consulta pelo código.");
+      help.id = "ajuda-decisao";
+      help.className = "form-help";
     }
+    const noteGroup = node(form, "div");
+    const label = node(noteGroup, "label", awaiting ? "Observação interna (opcional)" : "Justificativa da revisão (obrigatória)");
+    const note = node(label, "textarea");
+    note.name = "nota";
+    note.maxLength = 2000;
+    note.required = !awaiting;
+    note.setAttribute("aria-describedby", "ajuda-nota");
+    const noteHelp = node(noteGroup, "small", "Visível apenas à coordenação e ao superusuário.");
+    noteHelp.id = "ajuda-nota";
+    noteHelp.className = "form-help";
+    const actions = node(form, "div");
+    actions.className = "decision-actions";
+    const options = awaiting ? [["aprovar", "Aprovar solicitação"], ["reprovar", "Recusar solicitação"]] : [["reabrir análise", "Reabrir análise"]];
+    if (!awaiting && isExit && r.etapa !== "aguardando") options.push(["corrigir recepção", "Corrigir recepção"]);
+    if (!awaiting && isExit && r.etapa === "saída concluída") options.push(["corrigir portaria", "Corrigir portaria"]);
+    for (const [action, text] of options) {
+      const submit = node(actions, "button", text);
+      submit.type = "submit";
+      submit.value = action;
+      if (action === "reprovar") submit.className = "danger";
+      else if (!awaiting) submit.className = "secondary";
+      submit.onclick = () => { if (msg) msg.required = action === "reprovar"; };
+    }
+    form.onsubmit = (event) => {
+      event.preventDefault();
+      run(() => send(event.submitter.value, { nota: note.value, mensagem: msg?.value || "" }));
+    };
   }
-  if (
+  if (isExit && r.status === "APROVADA" && (
     (user.perfil === "recepção" && r.etapa === "aguardando") ||
     (user.perfil === "portaria" && r.etapa === "recepção confirmada")
-  ) {
+  )) {
     const box = node(
       node(
         el,
@@ -304,18 +380,19 @@ async function detail(id, page = 1) {
     box.onchange = () => (save.disabled = !box.checked);
   }
   node(el, "h3", "Histórico · horário de Fortaleza");
-  for (const e of r.historico.itens)
-    node(
-      el,
-      "article",
-      [e.quando, e.acao, e.autor, e.nota].filter(Boolean).join(" · "),
-    );
+  for (const e of r.historico.itens) {
+    const entry = node(el, "article");
+    node(entry, "strong", e.acao);
+    node(entry, "small", [e.quando, e.autor].filter(Boolean).join(" · ")).className = "history-meta";
+    if (e.nota) node(entry, "p", e.nota).className = "history-note";
+  }
   pager(el, page, r.historico.mais, (p) => detail(id, p));
-  el.scrollIntoView();
+  el.focus({ preventScroll: true });
+  el.scrollIntoView({ block: "start" });
 }
 function roleHelp() {
   const descriptions = {
-    "coordenação": "Analisa solicitações e decide sobre as saídas.",
+    "coordenação": "Analisa e aprova ou recusa solicitações de entrada e saída.",
     "recepção": "Confere autorizações de saída aprovadas.",
     "portaria": "Registra a saída após a conferência da recepção.",
     "superusuário": "Gerencia funcionários, permissões e análises."

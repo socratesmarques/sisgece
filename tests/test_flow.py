@@ -65,6 +65,73 @@ class Flow(unittest.TestCase):
         self.assertEqual(attempt(dict(login,usuario="user1")),200)
         self.assertEqual(attempt(login,remote="192.0.2.11"),200)
 
+    def test_entry_decisions(self):
+        public = app.test_client()
+        clients = {}
+        for role in ROLES:
+            client = app.test_client()
+            self.assertEqual(self.post(client, "login", {
+                "usuario": "user" + str(ROLES.index(role)), "senha": self.password,
+            }).status_code, 200)
+            clients[role] = client
+        for role in ("coordenação", "superusuário"):
+            for action, expected in (("aprovar", "APROVADA"), ("reprovar", "REPROVADA")):
+                with self.subTest(role=role, action=action):
+                    receipt = self.post(public, "solicitar", dict(
+                        tipo="Entrada", origem="Aluno", aluno="Entrada teste",
+                        matricula="E-" + secrets.token_hex(5), responsavel="Pessoa teste",
+                        telefone="85987654321", data="2030-01-01", hora="12:00",
+                        justificativa="Atendimento no campus",
+                    ))
+                    self.assertEqual(receipt.status_code, 201)
+                    self.assertEqual(self.post(public, "consulta", receipt.json).json["status"], "PENDENTE")
+                    client = clients[role]
+                    sid = client.get("/api/pedidos?tipo=Entrada").json["itens"][0]["id"]
+                    path = "pedidos/" + str(sid)
+                    for other in ("recepção", "portaria"):
+                        self.assertEqual(clients[other].get("/api/" + path).status_code, 404)
+                        self.assertEqual(self.post(clients[other], path, {"acao": action}).status_code, 403)
+                    if action == "reprovar":
+                        self.assertEqual(self.post(client, path, {"acao": action}).status_code, 400)
+                    self.assertEqual(self.post(client, path, {
+                        "acao": action, "mensagem": "Orientação pública", "nota": "Anotação reservada",
+                    }).status_code, 200)
+                    tracked = self.post(public, "consulta", receipt.json).json
+                    self.assertEqual(tracked, dict(tipo="Entrada", status=expected, etapa=None, mensagem="Orientação pública"))
+                    self.assertEqual(self.post(client, path, {"acao": action}).status_code, 409)
+                    for other in ("recepção", "portaria"):
+                        self.assertEqual(self.post(clients[other], path, {"acao": other}).status_code, 409)
+                        self.assertEqual(clients[other].get("/api/" + path).status_code, 404)
+                    self.assertEqual(self.post(client, path, {"acao": "corrigir recepção", "nota": "Revisão"}).status_code, 409)
+                    self.assertEqual(self.post(client, path, {"acao": "reabrir análise"}).status_code, 400)
+                    self.assertEqual(self.post(client, path, {"acao": "reabrir análise", "nota": "Revisar dados"}).status_code, 200)
+                    reopened = self.post(public, "consulta", receipt.json).json
+                    self.assertEqual(reopened, dict(tipo="Entrada", status="PENDENTE", etapa=None, mensagem=None))
+                    history = client.get("/api/" + path).json["historico"]["itens"]
+                    self.assertEqual(history[1]["acao"], action)
+                    self.assertEqual(history[1]["autor"], role)
+                    self.assertIn("Anotação reservada", history[1]["nota"])
+
+    def test_migrate_received_entries(self):
+        with psycopg.connect() as db:
+            sid = db.execute("""INSERT INTO solicitacoes(tipo,status,etapa,justificativa,protocolo,segredo)
+                VALUES ('Entrada','RECEBIDA',NULL,'Entrada anterior à atualização','ENTRADA-ANTIGA','segredo-preservado')
+                RETURNING id""").fetchone()[0]
+            db.execute("DELETE FROM versoes WHERE nome='006.sql'")
+        migrate()
+        migrate()
+        with psycopg.connect() as db:
+            row = db.execute("SELECT status,etapa,protocolo,segredo FROM solicitacoes WHERE id=%s", (sid,)).fetchone()
+        self.assertEqual(row, ("PENDENTE", None, "ENTRADA-ANTIGA", "segredo-preservado"))
+
+    def test_movement_filter(self):
+        client = app.test_client()
+        self.assertEqual(self.post(client, "login", {"usuario": "user0", "senha": self.password}).status_code, 200)
+        for movement in ("Entrada", "Saída"):
+            rows = client.get("/api/pedidos?tipo=" + movement).json["itens"]
+            self.assertTrue(rows)
+            self.assertTrue(all(row["tipo"] == movement for row in rows))
+
     def test_workflow(self):
         public = app.test_client()
         self.assertEqual(public.get("/api/pedidos").status_code, 401)
@@ -137,9 +204,9 @@ class Flow(unittest.TestCase):
         self.assertEqual(act(coord, "reprovar", mensagem="Dados insuficientes"), 200)
         entry = self.post(public, "solicitar", dict(form,tipo="Entrada"))
         self.assertEqual(entry.status_code,201)
-        self.assertEqual(self.post(public,"consulta",entry.json).json,dict(tipo="Entrada",status="RECEBIDA",etapa=None,mensagem=None))
-        path = "pedidos/"+str(coord.get("/api/pedidos?status=RECEBIDA").json["itens"][0]["id"])
-        self.assertEqual(act(coord,"aprovar"),409)
+        self.assertEqual(self.post(public,"consulta",entry.json).json,dict(tipo="Entrada",status="PENDENTE",etapa=None,mensagem=None))
+        path = "pedidos/"+str(coord.get("/api/pedidos?tipo=Entrada&status=PENDENTE").json["itens"][0]["id"])
+        self.assertEqual(act(coord,"aprovar"),200)
         self.assertEqual(act(desk,"recepção"),409)
         self.assertEqual(gate.get("/api/"+path).status_code,404)
         self.assertEqual(self.post(public,"solicitar",dict(form,tipo="outro")).status_code,400)
