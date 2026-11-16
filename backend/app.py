@@ -285,7 +285,7 @@ def submit():
     sid = query(
         """INSERT INTO solicitacoes(tipo,status,etapa,declarado,protocolo,segredo,justificativa,data_solicitada,horario_solicitado)
         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
-        (movement, "RECEBIDA" if movement=="Entrada" else "PENDENTE", None if movement=="Entrada" else "aguardando", Jsonb(data), protocol, digest(secret), value("justificativa", 2000), dt, tm),
+        (movement, "PENDENTE", None if movement == "Entrada" else "aguardando", Jsonb(data), protocol, digest(secret), value("justificativa", 2000), dt, tm),
     ).fetchone()["id"]
     event(movement+" · envio por " + data["origem"], sid)
     return {"codigo": secret[:5] + "-" + secret[5:]}, 201
@@ -330,12 +330,14 @@ def requests_list():
     term = "%" + request.args.get("q", "")[:200] + "%"
     status = request.args.get("status", "")
     day = request.args.get("data", "")
+    movement = request.args.get("tipo", "")
     return listing(
         """SELECT id,tipo,protocolo,declarado->>'aluno' AS aluno,status,etapa FROM solicitacoes
         WHERE (protocolo ILIKE %s OR declarado->>'aluno' ILIKE %s OR declarado->>'matricula' ILIKE %s)
         AND (%s='' OR status=%s) AND (%s='' OR data_solicitada::text=%s)
+        AND (%s='' OR tipo=%s)
         AND (%s OR (status='APROVADA' AND lower(tipo) IN ('saida','saída'))) ORDER BY id DESC""",
-        (term, term, term, status, status, day, day, not restricted()),
+        (term, term, term, status, status, day, day, movement, movement, not restricted()),
     )
 
 
@@ -401,11 +403,16 @@ def act(sid):
     ).fetchone()
     if not row:
         abort(404)
-    if row["tipo"].lower() not in ("saida", "saída"):
+    is_exit = row["tipo"].lower() in ("saida", "saída")
+    if not is_exit and row["tipo"].lower() != "entrada":
+        abort(409, "Movimentação histórica disponível apenas para consulta.")
+    if not is_exit and action in (
+        "recepção", "portaria", "corrigir recepção", "corrigir portaria"
+    ):
         abort(409, "Esta ação é exclusiva para solicitações de saída.")
     status, stage = row["status"], row["etapa"]
     note = value("nota", 2000, False)
-    if action in ("aprovar", "reprovar") and status == "PENDENTE":
+    if action in ("aprovar", "reprovar") and status in ("PENDENTE", "RECEBIDA"):
         msg = value("mensagem", 2000, action == "reprovar")
         query(
             """UPDATE solicitacoes SET status=%s,administrador_id=%s,analisado_em=clock_timestamp(),mensagem=%s,observacao_coordenacao=%s WHERE id=%s""",
@@ -430,7 +437,7 @@ def act(sid):
         )
     elif (
         action in ("corrigir recepção", "corrigir portaria", "reabrir análise")
-        and status != "PENDENTE"
+        and status in ("APROVADA", "REPROVADA")
     ):
         note = value("nota", 2000)
         if (
@@ -445,7 +452,7 @@ def act(sid):
             (
                 "recepção confirmada"
                 if action == "corrigir portaria"
-                else "aguardando",
+                else "aguardando" if is_exit else None,
                 sid,
             ),
         )
