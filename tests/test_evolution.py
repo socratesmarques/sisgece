@@ -64,6 +64,23 @@ class EvolutionTransport(unittest.TestCase):
         self.assertNotIn('codigo', body)
         self.assertNotIn('apikey', body)
 
+    def test_approval_payload_contains_only_request_summary(self):
+        from datetime import date, time
+        self.http.side_effect = None
+        self.http.return_value = b'{"key":{"id":"approved-123"}}'
+        row = dict(self.row, template_tipo='aprovar',
+                   solicitacao_tipo='Saída',
+                   solicitacao_data=date(2030, 1, 2),
+                   solicitacao_horario=time(14, 30),
+                   aluno='NOME PRIVADO', matricula='MATRICULA PRIVADA',
+                   justificativa='JUSTIFICATIVA PRIVADA')
+        self.assertEqual(EvolutionProvider().send(row).state, 'sent')
+        body = json.loads(self.http.call_args.args[0].data)
+        for expected in ('Tipo: Saída', 'Data: 02/01/2030', 'Horário: 14:30'):
+            self.assertIn(expected, body['text'])
+        for private in ('NOME PRIVADO', 'MATRICULA PRIVADA', 'JUSTIFICATIVA PRIVADA'):
+            self.assertNotIn(private, body['text'])
+
     def test_http_and_ambiguous_errors(self):
         for status, expected in ((400,'failed'), (401,'failed'),
                                  (429,'retry'), (500,'uncertain')):
