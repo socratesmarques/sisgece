@@ -56,7 +56,9 @@ def prepare(row):
     with connection() as conn:
         # Mesmo ordenamento de bloqueios que a revogação: assinatura, depois fila.
         active = conn.execute('''SELECT a.verificado_em,a.revogado_em,a.consentimento_versao,s.status,s.etapa,
-            s.declarado->>'telefone' AS telefone FROM notificacao_assinaturas a
+            s.declarado->>'telefone' AS telefone, s.tipo AS solicitacao_tipo,
+            s.data_solicitada AS solicitacao_data,
+            s.horario_solicitado AS solicitacao_horario FROM notificacao_assinaturas a
             JOIN solicitacoes s ON s.id=a.solicitacao WHERE a.id=%s FOR UPDATE OF a''',
             (row['assinatura'],)).fetchone()
         current = conn.execute('''SELECT * FROM notificacoes WHERE id=%s AND estado='processing'
@@ -69,6 +71,11 @@ def prepare(row):
             active['etapa'] != row['etapa_origem']):
             conn.execute("UPDATE notificacoes SET estado='cancelled',resultado='authorization_changed' WHERE id=%s",(row['id'],))
             return False
+        # Dados mínimos da solicitação já autorizada; não incluem nome, CPF,
+        # matrícula, justificativa, protocolo ou código público.
+        row['solicitacao_tipo'] = active['solicitacao_tipo']
+        row['solicitacao_data'] = active['solicitacao_data']
+        row['solicitacao_horario'] = active['solicitacao_horario']
         if current['tentativas'] >= MAX_ATTEMPTS:
             conn.execute("UPDATE notificacoes SET estado='failed',resultado='attempts_exhausted' WHERE id=%s",(row['id'],))
             return False
