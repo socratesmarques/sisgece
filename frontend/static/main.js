@@ -136,6 +136,8 @@ if ($("pedido")) {
   });
   form.addEventListener("reset", () => form.telefone.setCustomValidity(""));
   bind("pedido", async (body) => {
+    body.whatsapp_consent = form.elements.whatsapp_consent.checked;
+    body.whatsapp_consent_version = form.elements.whatsapp_consent.dataset.version;
     const result = await api("solicitar", body);
     $("recibo").textContent =
       ("Solicitação salva. " + (body.tipo === "Entrada" ? "Seu pedido de entrada aguarda análise da coordenação." : "O envio ainda não autoriza a saída.")) + " Guarde seu código.\nCódigo de consulta: " +
@@ -151,6 +153,7 @@ if ($("pedido")) {
     movementGuide();
     form.origem.onchange();
     $("recibo").focus();
+    await notificationStatus(result.codigo);
   });
   bind("rastrear", async (body) => {
     $("resultado").textContent = "";
@@ -163,6 +166,7 @@ if ($("pedido")) {
     ]
       .filter(Boolean)
       .join(" · ");
+    await notificationStatus(body.codigo);
   });
 } else {
   bind("login", async (body) => {
@@ -282,7 +286,7 @@ async function detail(id, page = 1) {
     if (v) {
       const field = node(facts, "div");
       node(field, "dt", labels[k] || k[0].toUpperCase() + k.slice(1));
-      node(field, "dd", v);
+      node(field, "dd", k === "telefone" ? formatPhone(v) : v);
     }
   }
   if (r.status === "APROVADA" && ["saida","saída"].includes(r.tipo.toLowerCase())) {
@@ -370,6 +374,23 @@ async function detail(id, page = 1) {
     const save = button(el, "Registrar confirmação", () => send(user.perfil));
     save.disabled = true;
     box.onchange = () => (save.disabled = !box.checked);
+  }
+  if (["coordenação", "superusuário"].includes(user.perfil)) {
+    const section = node(el, "details");
+    node(section, "summary", "Notificações pelo WhatsApp");
+    const content = node(section, "div");
+    section.ontoggle = async () => {
+      if (!section.open) return;
+      content.replaceChildren();
+      try {
+        const records = await api("pedidos/" + id + "/notificacoes");
+        if (!records.itens.length) node(content, "p", "Nenhum envio registrado.");
+        for (const record of records.itens) {
+          node(content, "p", record.template_tipo + " · " + record.estado +
+            " · tentativas: " + record.tentativas + (record.resultado ? " · " + record.resultado : ""));
+        }
+      } catch (_) { node(content, "p", "Não foi possível consultar os envios."); }
+    };
   }
   node(el, "h3", "Histórico · horário de Fortaleza");
   for (const e of r.historico.itens)
@@ -459,4 +480,40 @@ async function requestHistory(page = 1) {
     node(line,"small",e.quando+" · "+e.protocolo);
   }
   pager(el,page,r.mais,requestHistory);
+}
+
+async function notificationStatus(code) {
+  const el = $("whatsapp-status");
+  el.replaceChildren();
+  try {
+    const state = await api("notificacoes/estado", {codigo: code});
+    if (state.estado === "sem autorização") return;
+    node(el, "p", "WhatsApp: " + state.estado + " · " +
+      (state.destinatario === "responsavel" ? "Responsável" : "Solicitante") + " · " + state.telefone);
+    if (state.estado === "aguardando confirmação") {
+      button(el, "Confirmar número no WhatsApp", async () => {
+        const confirmation = await api("notificacoes/confirmar-numero", {codigo: code});
+        const info = node(el, "div");
+        node(info, "p", "Envie esta mensagem pelo telefone informado. Ela expira em 15 minutos:");
+        node(info, "code", confirmation.mensagem).style.overflowWrap = "anywhere";
+        if (confirmation.url) {
+          const link = node(info, "a", "Abrir WhatsApp para confirmar");
+          link.href = confirmation.url;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+        } else {
+          node(info, "p", "Simulação local: a confirmação é feita pela ferramenta de testes do operador. Nenhuma mensagem real será enviada.");
+        }
+      });
+      button(el, "Atualizar confirmação", () => notificationStatus(code));
+    }
+    if (state.estado !== "revogada") {
+      button(el, "Revogar notificações", async () => {
+        await api("notificacoes/revogar", {codigo: code});
+        await notificationStatus(code);
+      });
+    }
+  } catch (_) {
+    node(el, "p", "Não foi possível consultar as notificações. Seu código continua válido para acompanhar a solicitação.");
+  }
 }

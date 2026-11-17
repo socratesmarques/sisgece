@@ -51,3 +51,13 @@ correlação heurística entre solicitações.
 - 21 testes aprovados (7,915 s), com transporte Meta sempre substituído.
 - Documentação oficial consultada em 17/11/2026 UTC: Messages API, mensagens
   de serviço/templates, referência de webhooks, criação do endpoint e erros.
+
+## Incremento 6
+
+Interface preservada, escolha explícita do titular, checkbox opt-in e controles
+na consulta. Resultado de envio somente para coordenação/superusuário.
+- Roteiro original de navegador aprovado novamente.
+- Novo roteiro WhatsApp aprovado em 390/1280 px: consentir, confirmar em mock,
+  processar, revogar e continuar consultando.
+- Uma execução inicial encontrou orçamento compartilhado de consultas/ações;
+  contadores separados corrigiram o problema. A repetição completa passou.

@@ -81,7 +81,7 @@ def check_input_formatting(page):
 
 
 with sync_playwright() as pw:
-    browser = pw.chromium.launch(channel=os.getenv("BROWSER_CHANNEL") or None)
+    browser = pw.chromium.launch(channel=os.getenv("BROWSER_CHANNEL") or None, executable_path=os.getenv("BROWSER_EXECUTABLE") or None)
     for width, role in [(1280, "Aluno"), (390, "Responsável")]:
         page = browser.new_page(viewport={"width": width, "height": 844})
         page.goto(url)
@@ -143,7 +143,7 @@ with psycopg.connect() as db:
         )
 
 with sync_playwright() as pw:
-    browser = pw.chromium.launch(channel=os.getenv("BROWSER_CHANNEL") or None)
+    browser = pw.chromium.launch(channel=os.getenv("BROWSER_CHANNEL") or None, executable_path=os.getenv("BROWSER_EXECUTABLE") or None)
     for width, role in zip((1280, 390, 390), roles):
         page = browser.new_page(viewport={"width": width, "height": 844})
         page.goto(url + "/equipe")
@@ -184,7 +184,7 @@ def assert_responsive(page):
 
 
 with sync_playwright() as pw:
-    browser = pw.chromium.launch(channel=os.getenv("BROWSER_CHANNEL") or None)
+    browser = pw.chromium.launch(channel=os.getenv("BROWSER_CHANNEL") or None, executable_path=os.getenv("BROWSER_EXECUTABLE") or None)
     errors = []
     def new_page(**options):
         page = browser.new_page(**options)
