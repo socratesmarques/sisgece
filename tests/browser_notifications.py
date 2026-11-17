@@ -16,6 +16,14 @@ with sync_playwright() as pw:
     browser = pw.chromium.launch(executable_path=os.getenv('BROWSER_EXECUTABLE') or None)
     for width in (390,1280):
         page = browser.new_page(viewport={'width':width,'height':900})
+        page.add_init_script("""
+            const originalFetch = window.fetch.bind(window);
+            const gate = new Promise(resolve => { window.resumeNotificationStatus = resolve; });
+            window.fetch = async (...args) => {
+                if (String(args[0]).includes('notificacoes/estado')) await gate;
+                return originalFetch(...args);
+            };
+        """)
         page.goto(url)
         form = page.locator('#pedido')
         expect(form.locator('[name=whatsapp_consent]')).not_to_be_checked()
@@ -27,6 +35,10 @@ with sync_playwright() as pw:
         form.locator('[name=whatsapp_consent]').check()
         form.get_by_role('button',name='Enviar solicitação').click()
         expect(page.locator('#recibo')).to_contain_text('Solicitação salva')
+        # A consulta principal funciona enquanto a consulta auxiliar está bloqueada.
+        page.get_by_role('button',name='Consultar solicitação').click()
+        expect(page.locator('#resultado')).to_contain_text('PENDENTE')
+        page.evaluate('window.resumeNotificationStatus()')
         status = page.locator('#whatsapp-status')
         expect(status).to_contain_text('aguardando confirmação')
         expect(status).to_contain_text('Solicitante')

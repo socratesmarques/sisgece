@@ -153,7 +153,7 @@ if ($("pedido")) {
     movementGuide();
     form.origem.onchange();
     $("recibo").focus();
-    await notificationStatus(result.codigo);
+    void notificationStatus(result.codigo);
   });
   bind("rastrear", async (body) => {
     $("resultado").textContent = "";
@@ -166,7 +166,7 @@ if ($("pedido")) {
     ]
       .filter(Boolean)
       .join(" · ");
-    await notificationStatus(body.codigo);
+    void notificationStatus(body.codigo);
   });
 } else {
   bind("login", async (body) => {
@@ -482,17 +482,21 @@ async function requestHistory(page = 1) {
   pager(el,page,r.mais,requestHistory);
 }
 
+let notificationRequest = 0;
 async function notificationStatus(code) {
+  const version = ++notificationRequest;
   const el = $("whatsapp-status");
   el.replaceChildren();
   try {
     const state = await api("notificacoes/estado", {codigo: code});
+    if (version !== notificationRequest) return;
     if (state.estado === "sem autorização") return;
     node(el, "p", "WhatsApp: " + state.estado + " · " +
       (state.destinatario === "responsavel" ? "Responsável" : "Solicitante") + " · " + state.telefone);
     if (state.estado === "aguardando confirmação") {
       button(el, "Confirmar número no WhatsApp", async () => {
         const confirmation = await api("notificacoes/confirmar-numero", {codigo: code});
+        if (version !== notificationRequest) return;
         const info = node(el, "div");
         node(info, "p", "Envie esta mensagem pelo telefone informado. Ela expira em 15 minutos:");
         node(info, "code", confirmation.mensagem).style.overflowWrap = "anywhere";
@@ -514,6 +518,7 @@ async function notificationStatus(code) {
       });
     }
   } catch (_) {
+    if (version !== notificationRequest) return;
     node(el, "p", "Não foi possível consultar as notificações. Seu código continua válido para acompanhar a solicitação.");
   }
 }

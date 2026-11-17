@@ -87,3 +87,13 @@ na consulta. Resultado de envio somente para coordenação/superusuário.
 Não houve tráfego real de mensagens Meta, configuração de cobrança, acesso ao
 servidor de produção ou merge. Homologação com conta/template real e revisão
 institucional permanecem necessárias antes da habilitação real.
+
+## Correção identificada pela CI do PR
+
+A primeira execução remota aprovou os 25 testes e build/readiness Docker, mas
+revelou uma corrida no navegador: o recibo aparecia antes de a consulta auxiliar
+de notificações terminar, e o bloqueio global da interface ignorava um clique
+imediato na consulta pelo código. A consulta auxiliar agora roda sem bloquear
+a principal e descarta respostas antigas. O novo teste mantém essa requisição
+pendente deliberadamente e exige que a consulta principal continue funcionando.
+O roteiro novo e o original passaram novamente contra a imagem Docker corrigida.
