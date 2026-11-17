@@ -14,3 +14,13 @@ Antes de modificar a aplicação:
 
 Todos os testes de notificações devem usar mock ou transporte HTTP substituído.
 Não são evidência de homologação com a conta real da Meta.
+- Roteiro original `tests/browser.py`: aprovado com Chromium do sistema,
+  incluindo máscaras, cadastro/consulta, decisão de entrada e saída,
+  recepção/portaria e responsividade (390, 768, 1024 e 1440 px).
+
+## Incremento 2
+
+Migração aditiva 007, telefone canônico no JSONB existente, consentimento explícito,
+desafios de uso único e revogação. Testes cobrem número inválido, consentimento
+malformado/desatualizado, remetente incorreto, isolamento mock/Meta, expiração,
+reutilização e manutenção da consulta pelo código.

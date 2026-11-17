@@ -13,6 +13,9 @@ import psycopg
 from flask import Flask, abort, g, jsonify, render_template, request
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
+from backend.notifications.phone import normalize_phone
+from backend.notifications.consent import subscribe
+from backend.notifications.routes import register as register_notifications
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -261,6 +264,10 @@ def submit():
         or not 10 <= len(re.sub(r"\D", "", data["telefone"])) <= 13
     ):
         abort(400, "Tipo ou telefone inválido.")
+    try:
+        data["telefone"] = normalize_phone(data["telefone"])
+    except ValueError as error:
+        abort(400, str(error))
     if data["origem"] == "Responsável":
         cpf = value("cpf", 14)
         if not re.fullmatch(
@@ -287,6 +294,10 @@ def submit():
         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
         (movement, "PENDENTE", None if movement == "Entrada" else "aguardando", Jsonb(data), protocol, digest(secret), value("justificativa", 2000), dt, tm),
     ).fetchone()["id"]
+    try:
+        subscribe(db(), sid, request.json)
+    except ValueError as error:
+        abort(400, str(error))
     event(movement+" · envio por " + data["origem"], sid)
     return {"codigo": secret[:5] + "-" + secret[5:]}, 201
 
@@ -563,3 +574,6 @@ def account():
         note=f"Funcionário {uid} · {role} · " + ("ativo" if active else "inativo"),
     )
     return {"ok": True}
+
+
+register_notifications(app, db, query, value, limit, staff)
