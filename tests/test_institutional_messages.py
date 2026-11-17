@@ -34,6 +34,27 @@ class InstitutionalMessages(unittest.TestCase):
                 self.assertEqual(public_link(), '')
                 self.assertNotIn(invalid, message_text('cadastro'))
 
+    def test_approval_details_only_when_typed_and_authorized(self):
+        from datetime import date, time
+        details = {
+            'solicitacao_tipo': 'Saída',
+            'solicitacao_data': date(2030, 1, 2),
+            'solicitacao_horario': time(14, 30),
+            'aluno': 'NOME PRIVADO',
+            'cpf': '12345678901',
+            'justificativa': 'MOTIVO PRIVADO',
+        }
+        text = message_text('aprovar', details)
+        self.assertIn('Tipo: Saída', text)
+        self.assertIn('Data: 02/01/2030', text)
+        self.assertIn('Horário: 14:30', text)
+        for private in ('NOME PRIVADO', '12345678901', 'MOTIVO PRIVADO'):
+            self.assertNotIn(private, text)
+        self.assertNotIn('Informações da solicitação', message_text('cadastro', details))
+        self.assertNotIn('Informações da solicitação', message_text('aprovar'))
+        self.assertNotIn('Informações da solicitação', message_text('aprovar',
+            dict(details, solicitacao_data='texto externo')))
+
     def test_specific_meaning_of_each_event(self):
         expectations = {
             'cadastro': 'pendente de análise',
