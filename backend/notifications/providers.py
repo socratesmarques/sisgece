@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Protocol
 import os
 
-from .outbox import TEMPLATES
+from .outbox import message_text
 
 
 @dataclass(frozen=True)
@@ -31,7 +31,7 @@ class MockProvider:
 
     def send(self, notification):
         self.messages.append({'id': notification['id'], 'template': notification['template_nome'],
-                              'text': TEMPLATES[notification['template_tipo']][1]})
+                              'text': message_text(notification['template_tipo'])})
         if self.outcome == 'temporary':
             return Result('retry','mock_temporary')
         if self.outcome == 'permanent':
