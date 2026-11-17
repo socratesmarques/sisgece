@@ -55,7 +55,7 @@ def finish(response):
             "X-Content-Type-Options": "nosniff",
             "X-Frame-Options": "DENY",
             "Referrer-Policy": "no-referrer",
-            "Content-Security-Policy": "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+            "Content-Security-Policy": "default-src 'self'; img-src 'self' https://acervo.ifce.edu.br; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
         }
     )
     if not LOCAL:
