@@ -167,6 +167,28 @@ class Notifications(unittest.TestCase):
             self.assertEqual(row['tentativas'],1)
             self.assertTrue(row['externo_id'].startswith('mock-'))
 
+    def test_approval_worker_loads_request_date_and_time(self):
+        from backend.notifications.worker import process_one
+        from backend.notifications.providers import MockProvider
+        from datetime import date, time
+        self.clear_queue()
+        sid = self.verified()
+        # Só para o teste: transformar a notificação existente em evento de aprovação.
+        with self.conn() as conn:
+            conn.execute("""UPDATE solicitacoes SET status='APROVADA'
+                            WHERE id=%s""", (sid,))
+            conn.execute("""UPDATE notificacoes SET template_tipo='aprovar',
+                            status_origem='APROVADA' WHERE solicitacao=%s""", (sid,))
+        provider = MockProvider()
+        self.assertTrue(process_one(provider))
+        self.assertEqual(len(provider.messages), 1)
+        msg = provider.messages[0]['text']
+        self.assertIn('Tipo: Saída', msg)
+        self.assertIn('Data: 01/01/2030', msg)
+        self.assertIn('Horário: 12:00', msg)
+        self.assertNotIn('Fictício', msg)
+        self.assertNotIn('12345678901', msg)
+
     def test_retry_permanent_and_uncertain(self):
         from backend.notifications.worker import process_one
         from backend.notifications.providers import MockProvider
