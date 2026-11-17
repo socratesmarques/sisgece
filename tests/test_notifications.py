@@ -216,3 +216,120 @@ class Notifications(unittest.TestCase):
         provider = MockProvider()
         self.assertFalse(process_one(provider))
         self.assertEqual(provider.messages,[])
+
+    def webhook(self, payload, valid=True):
+        import json, hmac, hashlib
+        raw = json.dumps(payload).encode()
+        signature = hmac.new(b's'*32,raw,hashlib.sha256).hexdigest() if valid else 'wrong'
+        return self.client.post('/api/notificacoes/webhook',data=raw,content_type='application/json',headers={'X-Hub-Signature-256':'sha256='+signature})
+
+    def envelope(self, **kw):
+        return {'object':'whatsapp_business_account','entry':[{'id':'123','changes':[{'field':'messages','value':{'metadata':{'phone_number_id':'456'},**kw}}]}]}
+
+    def test_webhook_signature_verification_and_replay(self):
+        config = {'WHATSAPP_APP_SECRET':'s'*32,'WHATSAPP_WEBHOOK_VERIFY_TOKEN':'v'*32,
+                  'WHATSAPP_WABA_ID':'123','WHATSAPP_PHONE_NUMBER_ID':'456','NOTIFICATIONS_PROVIDER':'meta'}
+        with patch.dict(os.environ,config):
+            receipt = self.submit()
+            sid = self.latest()
+            with self.conn() as conn:
+                token,_ = challenge(conn,sid)
+            payload = self.envelope(messages=[{'id':'message-1','type':'text','from':'5585987654321','text':{'body':'CONFIRMAR '+token}}])
+            self.assertEqual(self.webhook(payload,False).status_code,403)
+            self.assertEqual(self.webhook(payload).status_code,200)
+            self.assertEqual(self.webhook(payload).status_code,200)
+            self.assertEqual(self.post('notificacoes/estado',receipt.json).json['estado'],'ativa')
+            self.assertEqual(self.client.get('/api/notificacoes/webhook?hub.mode=subscribe&hub.verify_token='+('v'*32)+'&hub.challenge=12345').data,b'12345')
+            self.assertEqual(self.client.get('/api/notificacoes/webhook?hub.mode=subscribe&hub.verify_token=wrong').status_code,403)
+            payload = self.envelope(messages=[{'id':'stop-1','type':'text','from':'5585987654321','text':{'body':'PARAR'}}])
+            self.assertEqual(self.webhook(payload).status_code,200)
+            self.assertEqual(self.post('notificacoes/estado',receipt.json).json['estado'],'revogada')
+            self.assertEqual(self.webhook({'object':'whatsapp_business_account','entry':[None]}).status_code,400)
+
+    def test_early_out_of_order_delivery(self):
+        from backend.notifications.worker import claim, prepare, finish
+        from backend.notifications.providers import Result
+        self.clear_queue()
+        config = {'WHATSAPP_APP_SECRET':'s'*32,'WHATSAPP_WEBHOOK_VERIFY_TOKEN':'v'*32,
+                  'WHATSAPP_WABA_ID':'123','WHATSAPP_PHONE_NUMBER_ID':'456','NOTIFICATIONS_PROVIDER':'meta'}
+        with patch.dict(os.environ,config):
+            self.submit()
+            sid = self.latest()
+            with self.conn() as conn:
+                token,_ = challenge(conn,sid)
+                self.assertTrue(confirm(conn,token,'5585987654321','meta'))
+            row = claim('meta')
+            self.assertTrue(prepare(row))
+            delivery = dict(id='wamid.early',status='delivered',timestamp='1794873600',recipient_id='5585987654321')
+            self.assertEqual(self.webhook(self.envelope(statuses=[delivery])).status_code,200)
+            finish(row,Result('sent','meta_accepted','wamid.early'))
+            for state in ('sent','failed','delivered','read'):
+                self.assertEqual(self.webhook(self.envelope(statuses=[dict(delivery,status=state)])).status_code,200)
+            with self.conn() as conn:
+                self.assertEqual(conn.execute('SELECT estado FROM notificacoes WHERE id=%s',(row['id'],)).fetchone()['estado'],'delivered')
+
+    def test_webhook_scope_and_size(self):
+        config = {'WHATSAPP_APP_SECRET':'s'*32,'WHATSAPP_WEBHOOK_VERIFY_TOKEN':'v'*32,
+                  'WHATSAPP_WABA_ID':'123','WHATSAPP_PHONE_NUMBER_ID':'456'}
+        with patch.dict(os.environ,config):
+            payload = self.envelope(statuses=[{'id':'other','status':'sent','timestamp':'1794873600'}])
+            payload['entry'][0]['id']='other-account'
+            self.assertEqual(self.webhook(payload).status_code,200)
+            with self.conn() as conn:
+                self.assertIsNone(conn.execute("SELECT * FROM notificacao_entregas WHERE externo_id='other'").fetchone())
+            self.assertEqual(self.client.post('/api/notificacoes/webhook',data=b'x'*1048577).status_code,413)
+
+
+class MetaTransport(unittest.TestCase):
+    def setUp(self):
+        self.config = patch.dict(os.environ,{'WHATSAPP_REAL_SEND_ENABLED':'1',
+            'WHATSAPP_ACCESS_TOKEN':'test-token','WHATSAPP_API_VERSION':'v27.0','WHATSAPP_PHONE_NUMBER_ID':'456'})
+        self.config.start()
+        # O guard bloqueia toda chamada acidental. Cada teste fornece transporte falso.
+        self.transport = patch('backend.notifications.meta.http_send',side_effect=AssertionError('Network forbidden'))
+        self.http = self.transport.start()
+        self.addCleanup(self.transport.stop)
+        self.addCleanup(self.config.stop)
+        self.row = {'id':1,'telefone':'+5585987654321','template_nome':'sisgece_cadastro','template_idioma':'pt_BR'}
+
+    def test_disabled_and_success_payload(self):
+        import json
+        from backend.notifications.meta import MetaProvider
+        with patch.dict(os.environ,{'WHATSAPP_REAL_SEND_ENABLED':'0'}):
+            with self.assertRaises(ValueError):
+                MetaProvider()
+        self.http.side_effect=None
+        self.http.return_value=b'{"messages":[{"id":"wamid.test"}]}'
+        result = MetaProvider().send(self.row)
+        self.assertEqual(result.external_id,'wamid.test')
+        req = self.http.call_args.args[0]
+        self.assertEqual(req.full_url,'https://graph.facebook.com/v27.0/456/messages')
+        body = json.loads(req.data)
+        self.assertEqual(body['type'],'template')
+        self.assertEqual(body['template'],{'name':'sisgece_cadastro','language':{'code':'pt_BR'}})
+        self.assertNotIn('aluno',body)
+        self.assertNotIn('codigo',body)
+
+    def test_http_errors_timeout_and_malformed_response(self):
+        from io import BytesIO
+        from urllib.error import HTTPError, URLError
+        import socket
+        from backend.notifications.meta import MetaProvider
+        for status,code,expected in [(429,130429,'retry'),(400,131056,'retry'),(401,190,'failed'),(400,132001,'failed'),(500,131000,'uncertain')]:
+            self.http.side_effect=HTTPError('https://graph.facebook.com',status,'test',{},BytesIO(('{"error":{"code":%d,"message":"private"}}'%code).encode()))
+            result = MetaProvider().send(self.row)
+            self.assertEqual(result.state,expected)
+            self.assertNotIn('private',result.code)
+        for error,expected in [(TimeoutError(),'uncertain'),(URLError(socket.gaierror()),'retry'),(URLError('broken'),'uncertain')]:
+            self.http.side_effect=error
+            self.assertEqual(MetaProvider().send(self.row).state,expected)
+        self.http.side_effect=None
+        for data in (b'bad',b'{}',b'{"messages":[]}',b'x'*65537):
+            self.http.return_value=data
+            self.assertEqual(MetaProvider().send(self.row).state,'uncertain')
+
+    def test_no_redirect_or_invalid_template(self):
+        from backend.notifications.meta import NoRedirect, MetaProvider
+        self.assertIsNone(NoRedirect().redirect_request(None,None,302,'',{},'https://other.example'))
+        self.assertEqual(MetaProvider().send(dict(self.row,template_nome='../bad')).state,'failed')
+        self.http.assert_not_called()

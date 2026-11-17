@@ -12,6 +12,7 @@ from psycopg.rows import dict_row
 
 from .config import provider_name
 from .providers import MockProvider, Result
+from .webhooks import reconcile
 
 MAX_ATTEMPTS = 5
 LEASE_SECONDS = 120
@@ -22,6 +23,7 @@ def connection():
 
 
 def recover(conn):
+    reconcile(conn)
     # Nunca reenvia automaticamente quando o despacho pode ter chegado ao provedor.
     conn.execute('''UPDATE notificacoes SET
         estado=CASE WHEN despacho_em IS NULL THEN 'pending' ELSE 'uncertain' END,
@@ -111,6 +113,7 @@ def finish(row, result):
             proxima_tentativa=clock_timestamp()+make_interval(secs=>%s),reserva_ate=NULL,
             despacho_em=CASE WHEN %s='pending' THEN NULL ELSE despacho_em END
             WHERE id=%s''',(state,result.code,result.external_id,state,delay,state,row['id']))
+        reconcile(conn)
 
 
 def process_one(provider):

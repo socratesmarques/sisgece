@@ -51,3 +51,11 @@ CREATE TABLE notificacao_ritmo (
     chave text PRIMARY KEY,
     disponivel_em timestamptz NOT NULL
 );
+-- Recebimentos mínimos permitem reconciliar webhook anterior à resposta HTTP.
+CREATE TABLE notificacao_entregas (
+    externo_id text NOT NULL,
+    estado text NOT NULL CHECK(estado IN ('sent','delivered','read','failed')),
+    quando timestamptz NOT NULL,
+    erro_codigo integer,
+    PRIMARY KEY(externo_id,estado)
+);

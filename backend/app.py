@@ -13,7 +13,9 @@ import psycopg
 from flask import Flask, abort, g, jsonify, render_template, request
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
+from backend.notifications.webhooks import register as register_webhook
 from backend.notifications.outbox import enqueue
+from backend.notifications.config import CONSENT_VERSION, CONSENT_TEXT, provider_name
 from backend.notifications.phone import normalize_phone
 from backend.notifications.consent import subscribe
 from backend.notifications.routes import register as register_notifications
@@ -81,6 +83,9 @@ def database_error(e):
 
 @app.before_request
 def protect():
+    if request.endpoint == "whatsapp_webhook":
+        request.max_content_length = 1048576
+        return
     if request.method == "POST":
         # Custom header cannot be sent cross-origin without a successful CORS preflight.
         if request.headers.get("X-SISGECE") != "1" or not request.is_json:
@@ -188,7 +193,10 @@ def event(action, sid=None, note=None):
 @app.get("/")
 @app.get("/equipe")
 def home():
-    return render_template("home.html", equipe=request.path == "/equipe")
+    return render_template("home.html", equipe=request.path == "/equipe",
+                           whatsapp_consent_version=CONSENT_VERSION,
+                           whatsapp_consent_text=CONSENT_TEXT,
+                           whatsapp_mock=provider_name() == "mock")
 
 
 @app.get("/api/ready")
@@ -580,3 +588,5 @@ def account():
 
 
 register_notifications(app, db, query, value, limit, staff)
+
+register_webhook(app, db)

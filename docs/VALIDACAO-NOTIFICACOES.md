@@ -40,3 +40,14 @@ limite de tentativas e ritmo global/por destinatário persistido. Mock permite
 inspeção em memória e sucesso/falhas sem chamadas externas.
 - 15 testes aprovados (7,950 s), incluindo quatro workers concorrentes,
   timeout ambíguo, falha permanente/temporária e reinicialização.
+
+## Incremento 5
+
+API oficial com templates, TLS, host fixo, sem redirects ou retry HTTP implícito.
+Webhook HMAC-SHA256 sobre bytes originais, validação WABA/Phone Number ID,
+deduplicação, confirmação/revogação e armazenamento mínimo de estados de entrega.
+Callbacks anteriores à resposta HTTP são conciliados pelo ID externo; sem
+correlação heurística entre solicitações.
+- 21 testes aprovados (7,915 s), com transporte Meta sempre substituído.
+- Documentação oficial consultada em 17/11/2026 UTC: Messages API, mensagens
+  de serviço/templates, referência de webhooks, criação do endpoint e erros.
