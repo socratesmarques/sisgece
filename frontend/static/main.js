@@ -233,9 +233,9 @@ if ($("pedido")) {
 async function list(page = 1) {
   const p = new URLSearchParams(fields($("filtro")));
   p.set("pagina", page);
-  const r = await api("pedidos?" + p);
   const el = $("lista");
   el.replaceChildren();
+  const r = await api("pedidos?" + p);
   if (!r.itens.length) node(el, "p", "Nenhuma solicitação encontrada.");
   for (const item of r.itens) {
     const line = node(el, "article");
@@ -257,10 +257,11 @@ async function list(page = 1) {
   pager(el, page, r.mais, list);
 }
 async function detail(id, page = 1) {
-  const r = await api("pedidos/" + id + "?pagina=" + page),
-    el = $("detalhe");
-  el.hidden = false;
+  const el = $("detalhe");
+  el.hidden = true;
   el.replaceChildren();
+  const r = await api("pedidos/" + id + "?pagina=" + page);
+  el.hidden = false;
   node(el, "h2", "Solicitação " + r.protocolo);
   const labels = {
     aluno: "Estudante",

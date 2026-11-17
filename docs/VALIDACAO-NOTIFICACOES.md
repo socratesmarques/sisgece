@@ -109,3 +109,11 @@ O risco de número incorreto sem prova de posse está registrado em NOTIFICACOES
 Validação local desta alteração: 26 testes unittest aprovados (11,766 s), roteiro
 WhatsApp em 390/1280 px aprovado sem confirmação e roteiro original de navegador
 aprovado, incluindo consulta pelo código e responsividade. Envio real desabilitado.
+
+## Revisão e atualização do PR
+
+Reexecução local: 26 testes unittest aprovados (10,743 s), além dos dois roteiros
+de navegador. A CI identificou ações antigas visíveis ao carregar outro pedido.
+Lista e detalhes agora removem os resultados anteriores antes de buscar os novos.
+A regressão no navegador mantém essas respostas pendentes deliberadamente e
+verifica que os registros e botões antigos não ficam disponíveis para clique.
