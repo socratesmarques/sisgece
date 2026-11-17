@@ -13,6 +13,7 @@ import psycopg
 from flask import Flask, abort, g, jsonify, render_template, request
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
+from backend.notifications.outbox import enqueue
 from backend.notifications.phone import normalize_phone
 from backend.notifications.consent import subscribe
 from backend.notifications.routes import register as register_notifications
@@ -178,10 +179,10 @@ def staff(*roles):
 
 
 def event(action, sid=None, note=None):
-    query(
-        "INSERT INTO eventos(solicitacao,autor,acao,nota) VALUES (%s,%s,%s,%s)",
+    return query(
+        "INSERT INTO eventos(solicitacao,autor,acao,nota) VALUES (%s,%s,%s,%s) RETURNING id",
         (sid, g.get("user", {}).get("id"), action, note),
-    )
+    ).fetchone()["id"]
 
 
 @app.get("/")
@@ -298,7 +299,8 @@ def submit():
         subscribe(db(), sid, request.json)
     except ValueError as error:
         abort(400, str(error))
-    event(movement+" · envio por " + data["origem"], sid)
+    event_id = event(movement+" · envio por " + data["origem"], sid)
+    enqueue(db(), sid, event_id, "cadastro")
     return {"codigo": secret[:5] + "-" + secret[5:]}, 201
 
 
@@ -474,7 +476,8 @@ def act(sid):
             )
     else:
         abort(409, "Ação incompatível com a situação atual.")
-    event(action, sid, note)
+    event_id = event(action, sid, note)
+    enqueue(db(), sid, event_id, action)
     return {"ok": True}
 
 

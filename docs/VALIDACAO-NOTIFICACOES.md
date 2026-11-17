@@ -24,3 +24,10 @@ Migração aditiva 007, telefone canônico no JSONB existente, consentimento exp
 desafios de uso único e revogação. Testes cobrem número inválido, consentimento
 malformado/desatualizado, remetente incorreto, isolamento mock/Meta, expiração,
 reutilização e manutenção da consulta pelo código.
+- Incremento 2: 9 testes aprovados em PostgreSQL 17 (6,492 s).
+
+## Incremento 3
+
+Fila inserida na mesma transação do evento e da decisão. Restrição única por
+evento/canal/assinatura; supersessão de pendências antigas. Testes adicionais de
+rollback por falha na fila e aprovação concorrente (um 200 e um 409).
