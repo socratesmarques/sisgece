@@ -136,9 +136,12 @@ def main():
     args = parser.parse_args()
     if provider_name() == 'mock':
         provider = MockProvider()
-    else:
+    elif provider_name() == 'meta':
         from .meta import MetaProvider
         provider = MetaProvider()
+    else:
+        from .evolution import EvolutionProvider
+        provider = EvolutionProvider()
     stopping = False
     def stop(*_):
         nonlocal stopping
