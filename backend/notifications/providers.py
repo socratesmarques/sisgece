@@ -31,7 +31,7 @@ class MockProvider:
 
     def send(self, notification):
         self.messages.append({'id': notification['id'], 'template': notification['template_nome'],
-                              'text': message_text(notification['template_tipo'])})
+                              'text': message_text(notification['template_tipo'], notification)})
         if self.outcome == 'temporary':
             return Result('retry','mock_temporary')
         if self.outcome == 'permanent':
