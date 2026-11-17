@@ -12,7 +12,7 @@ def authorized_without_challenge(version):
 
 def provider_name():
     name = os.getenv('NOTIFICATIONS_PROVIDER', 'mock')
-    if name not in ('mock', 'meta'):
+    if name not in ('mock', 'meta', 'evolution'):
         raise ValueError('Provedor de notificações inválido.')
     return name
 
