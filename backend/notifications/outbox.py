@@ -78,9 +78,9 @@ def approval_details(notification):
         return ''
     if not isinstance(hour, time):
         return ''
-    return ('*Informações da solicitação*\\n'
-            f'Tipo: {kind}\\n'
-            f'Data: {day:%d/%m/%Y}\\n'
+    return ('*Informações da solicitação*\n'
+            f'Tipo: {kind}\n'
+            f'Data: {day:%d/%m/%Y}\n'
             f'Horário: {hour:%H:%M}')
 
 
@@ -90,7 +90,7 @@ def message_text(action, notification=None):
     if action == 'aprovar':
         details = approval_details(notification)
         if details:
-            content += '\\n\\n' + details
+            content += '\n\n' + details
     link = public_link()
     consultation = ('Para acompanhar o andamento e consultar os detalhes, acesse:\n' + link
                     if link else 'Para acompanhar o andamento, consulte o portal oficial do SISGECE.')
