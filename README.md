@@ -108,3 +108,12 @@ python tests/browser.py
 ```
 
 A CI exercita PostgreSQL 17, a imagem Docker e Chromium. O navegador usa apenas arquivos locais ao servidor. Os limites usam janelas de dez minutos no PostgreSQL. Logins corretos não consomem tentativas. Após 15 falhas para o mesmo usuário e origem, novas tentativas dessa combinação são bloqueadas até a janela virar; após 60 falhas da mesma origem, o bloqueio vale para todos os usuários dessa origem. Formulário e consulta têm contadores independentes.
+
+## Contexto para novas conversas e agentes de IA
+
+Para transferir o conhecimento do projeto sem confundir implementação, PRs e implantação:
+
+- [Briefing rápido do SISGECE](docs/BRIEFING_RAPIDO.md): visão geral e prompt pronto para novas conversas.
+- [Contexto técnico completo](docs/CONTEXTO_PROJETO.md): arquitetura, regras, API, segurança, estado de PRs e roteiro de continuidade.
+
+Esses documentos são uma fotografia datada; confirme a branch, o código e o servidor antes de assumir que algo já foi implantado.
