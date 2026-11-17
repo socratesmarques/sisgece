@@ -48,6 +48,8 @@ class InstitutionalMessages(unittest.TestCase):
         self.assertIn('Tipo: Saída', text)
         self.assertIn('Data: 02/01/2030', text)
         self.assertIn('Horário: 14:30', text)
+        self.assertIn('estabelecidas pela instituição.\n\n*Informações da solicitação*\nTipo: Saída\nData: 02/01/2030\nHorário: 14:30', text)
+        self.assertNotIn(r'\\n', text)
         for private in ('NOME PRIVADO', '12345678901', 'MOTIVO PRIVADO'):
             self.assertNotIn(private, text)
         self.assertNotIn('Informações da solicitação', message_text('cadastro', details))
