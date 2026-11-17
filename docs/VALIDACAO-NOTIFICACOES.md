@@ -31,3 +31,12 @@ reutilização e manutenção da consulta pelo código.
 Fila inserida na mesma transação do evento e da decisão. Restrição única por
 evento/canal/assinatura; supersessão de pendências antigas. Testes adicionais de
 rollback por falha na fila e aprovação concorrente (um 200 e um 409).
+- Incremento 3: 11 testes aprovados (7,020 s).
+
+## Incremento 4
+
+Worker com SKIP LOCKED, reserva limitada, recuperação conservadora, backoff,
+limite de tentativas e ritmo global/por destinatário persistido. Mock permite
+inspeção em memória e sucesso/falhas sem chamadas externas.
+- 15 testes aprovados (7,950 s), incluindo quatro workers concorrentes,
+  timeout ambíguo, falha permanente/temporária e reinicialização.

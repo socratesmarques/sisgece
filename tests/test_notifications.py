@@ -134,3 +134,85 @@ class Notifications(unittest.TestCase):
         with self.conn() as conn:
             rows = conn.execute('SELECT template_tipo,estado FROM notificacoes WHERE solicitacao=%s ORDER BY id',(sid,)).fetchall()
             self.assertEqual(rows,[{'template_tipo':'cadastro','estado':'cancelled'},{'template_tipo':'aprovar','estado':'pending'}])
+
+    def verified(self):
+        self.submit()
+        sid = self.latest()
+        with self.conn() as conn:
+            token,_ = challenge(conn,sid)
+            self.assertTrue(confirm(conn,token,'5585987654321','mock'))
+        return sid
+
+    def clear_queue(self):
+        with self.conn() as conn:
+            conn.execute('TRUNCATE notificacao_ritmo')
+            conn.execute("UPDATE notificacoes SET estado='cancelled' WHERE estado IN ('pending','processing')")
+
+    def test_mock_and_concurrent_workers(self):
+        from backend.notifications.worker import process_one
+        from backend.notifications.providers import MockProvider
+        from concurrent.futures import ThreadPoolExecutor
+        self.clear_queue()
+        sid = self.verified()
+        provider = MockProvider()
+        with ThreadPoolExecutor(4) as pool:
+            list(pool.map(lambda _:process_one(provider),range(4)))
+        self.assertEqual(len(provider.messages),1)
+        self.assertIn('SISGECE',provider.messages[0]['text'])
+        self.assertNotIn('telefone',provider.messages[0])
+        self.assertFalse(process_one(provider))
+        with self.conn() as conn:
+            row = conn.execute('SELECT estado,tentativas,externo_id FROM notificacoes WHERE solicitacao=%s',(sid,)).fetchone()
+            self.assertEqual(row['estado'],'sent')
+            self.assertEqual(row['tentativas'],1)
+            self.assertTrue(row['externo_id'].startswith('mock-'))
+
+    def test_retry_permanent_and_uncertain(self):
+        from backend.notifications.worker import process_one
+        from backend.notifications.providers import MockProvider
+        for outcome, expected in [('temporary','pending'),('permanent','failed'),('timeout','uncertain')]:
+            self.clear_queue()
+            sid = self.verified()
+            process_one(MockProvider(outcome))
+            with self.conn() as conn:
+                row = conn.execute('SELECT *,proxima_tentativa>now() AS future FROM notificacoes WHERE solicitacao=%s',(sid,)).fetchone()
+                self.assertEqual(row['estado'],expected)
+                self.assertTrue(row['future'])
+                conn.execute('TRUNCATE notificacao_ritmo')
+                conn.execute('UPDATE notificacoes SET proxima_tentativa=now() WHERE solicitacao=%s',(sid,))
+            provider = MockProvider()
+            process_one(provider)
+            self.assertEqual(len(provider.messages),1 if outcome=='temporary' else 0)
+
+    def test_restart_and_revoke_before_dispatch(self):
+        from backend.notifications.worker import claim, prepare, recover, process_one
+        from backend.notifications.providers import MockProvider
+        self.clear_queue()
+        sid = self.verified()
+        row = claim('mock')
+        with self.conn() as conn:
+            conn.execute("UPDATE notificacoes SET reserva_ate=now()-interval '1 second' WHERE id=%s",(row['id'],))
+            recover(conn)
+        self.assertFalse(prepare(row))
+        row = claim('mock')
+        self.assertTrue(prepare(row))
+        with self.conn() as conn:
+            conn.execute("UPDATE notificacoes SET reserva_ate=now()-interval '1 second' WHERE id=%s",(row['id'],))
+            recover(conn)
+            self.assertEqual(conn.execute('SELECT estado FROM notificacoes WHERE id=%s',(row['id'],)).fetchone()['estado'],'uncertain')
+        self.assertFalse(process_one(MockProvider()))
+        self.clear_queue()
+        sid = self.verified()
+        row = claim('mock')
+        with self.conn() as conn:
+            revoke(conn,sid)
+        self.assertFalse(prepare(row))
+
+    def test_unverified_never_sent(self):
+        from backend.notifications.worker import process_one
+        from backend.notifications.providers import MockProvider
+        self.clear_queue()
+        self.submit()
+        provider = MockProvider()
+        self.assertFalse(process_one(provider))
+        self.assertEqual(provider.messages,[])
