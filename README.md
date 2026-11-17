@@ -121,3 +121,12 @@ Consulte [arquitetura, execução local, configuração Meta e operação](docs/
 Em desenvolvimento, após as migrações, execute `python -m backend.notifications.worker`
 em outro terminal com o mesmo banco. A implantação exige um contêiner separado
 para esse comando, sem portas públicas; consulte o roteiro antes de atualizar.
+
+## Contexto para novas conversas e agentes de IA
+
+Para transferir o conhecimento do projeto sem confundir implementação, PRs e implantação:
+
+- [Briefing rápido do SISGECE](docs/BRIEFING_RAPIDO.md): visão geral e prompt pronto para novas conversas.
+- [Contexto técnico completo](docs/CONTEXTO_PROJETO.md): arquitetura, regras, API, segurança, estado de PRs e roteiro de continuidade.
+
+Esses documentos são uma fotografia datada; confirme a branch, o código e o servidor antes de assumir que algo já foi implantado.
