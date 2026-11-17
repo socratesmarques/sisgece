@@ -645,3 +645,33 @@ footer b {
 #editor::backdrop{background:#09281fc2}#editor form{grid-template-columns:1fr;margin-bottom:0}#editor small{margin-top:.3rem}
 .editor-actions{justify-content:flex-end;border-top:1px solid var(--line);padding-top:1rem}#cancelar{color:var(--ink);background:#edf2ee}#erro-conta:not(:empty){color:#8b3223;margin-top:.75rem}
 @media(max-width:620px){.person{grid-template-columns:minmax(0,1fr) auto}.person div{grid-column:1/-1}.person button{grid-column:2;grid-row:2/4}.person .access-state{grid-column:1}.directory-head{align-items:start}.role-name{font-size:.9rem}}
+
+/* Créditos institucionais no rodapé, com leitura em desktop e mobile. */
+.site-footer {
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+}
+.footer-identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+}
+.footer-credits {
+  margin: 0;
+  line-height: 1.6;
+}
+.footer-credits a {
+  color: var(--green);
+  font-weight: 650;
+  text-underline-offset: 0.18em;
+}
+.footer-credits a:hover {
+  text-decoration-thickness: 2px;
+}
+@media (max-width: 760px) {
+  .site-footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
