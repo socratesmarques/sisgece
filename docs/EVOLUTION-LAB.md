@@ -84,3 +84,27 @@ Pare o worker Evolution, defina `EVOLUTION_LAB_ENABLED=0` e
 `WHATSAPP_REAL_SEND_ENABLED=0` e recrie o contêiner com essas flags.
 Não altere estados da fila manualmente. A versão anterior permanece funcional
 com `mock` e `meta`.
+
+## Mensagens institucionais (oito eventos)
+
+Os textos aprovados ficam em `backend/notifications/outbox.py`, gerados pela
+função `message_text` e usados pelos provedores `mock` e `evolution`.
+O transporte Meta oficial continua utilizando exclusivamente os templates
+aprovados na Meta; alterar textos locais não atualiza os templates externos.
+
+Opcionalmente defina `SISGECE_PUBLIC_URL=https://dominio-institucional.exemplo/consulta`
+no ambiente do worker **apenas quando o endereço real for confirmado**.
+Sem configuração, o aviso orienta a consultar o portal oficial, mas não inclui
+nenhum placeholder, link local ou domínio fictício. URL não HTTPS, localhost,
+credenciais embutidas e query strings são ignoradas. Não envie nome, CPF,
+matrícula ou código de consulta por WhatsApp.
+
+Depois de alterar os textos ou a URL, reconstrua a imagem e recrie o worker;
+`docker restart` não recarrega variáveis de `--env-file`. Faça testes apenas
+com solicitações fictícias e números autorizados.
+
+Teste específico sem rede:
+
+```sh
+python -m unittest discover -s tests -p 'test_institutional_messages.py' -v
+```
