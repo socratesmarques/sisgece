@@ -58,7 +58,7 @@ class EvolutionProvider:
         kind = notification.get('template_tipo')
         if kind not in TEMPLATES:
             return Result('failed', 'invalid_message_type')
-        text = message_text(kind)
+        text = message_text(kind, notification)
         payload = {'number': phone.lstrip('+'), 'text': text}
         request = Request(self.url, data=json.dumps(payload).encode('utf-8'),
                           headers={'apikey': self.key, 'Content-Type': 'application/json'},
