@@ -97,3 +97,15 @@ imediato na consulta pelo código. A consulta auxiliar agora roda sem bloquear
 a principal e descarta respostas antigas. O novo teste mantém essa requisição
 pendente deliberadamente e exige que a consulta principal continue funcionando.
 O roteiro novo e o original passaram novamente contra a imagem Docker corrigida.
+
+## Simplificação solicitada pelo mantenedor
+
+Consentimento v2: somente a frase curta solicitada, sem textos de simulação,
+seleção extra de titular ou botão de confirmação. O telefone continua identificado
+como contato do responsável. Novos opt-ins v2 são processados automaticamente;
+`verificado_em` permanece nulo, e assinaturas v1 não são habilitadas retroativamente.
+O risco de número incorreto sem prova de posse está registrado em NOTIFICACOES.md.
+
+Validação local desta alteração: 26 testes unittest aprovados (11,766 s), roteiro
+WhatsApp em 390/1280 px aprovado sem confirmação e roteiro original de navegador
+aprovado, incluindo consulta pelo código e responsividade. Envio real desabilitado.

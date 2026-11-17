@@ -15,7 +15,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from backend.notifications.webhooks import register as register_webhook
 from backend.notifications.outbox import enqueue
-from backend.notifications.config import CONSENT_VERSION, CONSENT_TEXT, provider_name
+from backend.notifications.config import CONSENT_VERSION, CONSENT_TEXT
 from backend.notifications.phone import normalize_phone
 from backend.notifications.consent import subscribe
 from backend.notifications.routes import register as register_notifications
@@ -195,8 +195,7 @@ def event(action, sid=None, note=None):
 def home():
     return render_template("home.html", equipe=request.path == "/equipe",
                            whatsapp_consent_version=CONSENT_VERSION,
-                           whatsapp_consent_text=CONSENT_TEXT,
-                           whatsapp_mock=provider_name() == "mock")
+                           whatsapp_consent_text=CONSENT_TEXT)
 
 
 @app.get("/api/ready")

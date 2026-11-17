@@ -493,24 +493,6 @@ async function notificationStatus(code) {
     if (state.estado === "sem autorização") return;
     node(el, "p", "WhatsApp: " + state.estado + " · " +
       (state.destinatario === "responsavel" ? "Responsável" : "Solicitante") + " · " + state.telefone);
-    if (state.estado === "aguardando confirmação") {
-      button(el, "Confirmar número no WhatsApp", async () => {
-        const confirmation = await api("notificacoes/confirmar-numero", {codigo: code});
-        if (version !== notificationRequest) return;
-        const info = node(el, "div");
-        node(info, "p", "Envie esta mensagem pelo telefone informado. Ela expira em 15 minutos:");
-        node(info, "code", confirmation.mensagem).style.overflowWrap = "anywhere";
-        if (confirmation.url) {
-          const link = node(info, "a", "Abrir WhatsApp para confirmar");
-          link.href = confirmation.url;
-          link.target = "_blank";
-          link.rel = "noopener noreferrer";
-        } else {
-          node(info, "p", "Simulação local: a confirmação é feita pela ferramenta de testes do operador. Nenhuma mensagem real será enviada.");
-        }
-      });
-      button(el, "Atualizar confirmação", () => notificationStatus(code));
-    }
     if (state.estado !== "revogada") {
       button(el, "Revogar notificações", async () => {
         await api("notificacoes/revogar", {codigo: code});

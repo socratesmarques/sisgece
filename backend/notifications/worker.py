@@ -9,7 +9,7 @@ import time
 import psycopg
 from psycopg.rows import dict_row
 
-from .config import provider_name
+from .config import provider_name, CONSENT_VERSION, authorized_without_challenge
 from .providers import MockProvider, Result
 from .webhooks import reconcile
 
@@ -41,9 +41,9 @@ def claim(provider):
         recover(conn)
         row = conn.execute('''SELECT n.* FROM notificacoes n
             JOIN notificacao_assinaturas a ON a.id=n.assinatura
-            WHERE n.estado='pending' AND n.provedor=%s AND a.verificado_em IS NOT NULL
+            WHERE n.estado='pending' AND n.provedor=%s AND (a.verificado_em IS NOT NULL OR a.consentimento_versao=%s)
             AND a.revogado_em IS NULL AND n.proxima_tentativa<=clock_timestamp()
-            ORDER BY n.proxima_tentativa,n.id LIMIT 1 FOR UPDATE OF n SKIP LOCKED''', (provider,)).fetchone()
+            ORDER BY n.proxima_tentativa,n.id LIMIT 1 FOR UPDATE OF n SKIP LOCKED''', (provider,CONSENT_VERSION)).fetchone()
         if not row:
             return None
         token = secrets.token_hex(16)
@@ -55,7 +55,7 @@ def claim(provider):
 def prepare(row):
     with connection() as conn:
         # Mesmo ordenamento de bloqueios que a revogação: assinatura, depois fila.
-        active = conn.execute('''SELECT a.verificado_em,a.revogado_em,s.status,s.etapa,
+        active = conn.execute('''SELECT a.verificado_em,a.revogado_em,a.consentimento_versao,s.status,s.etapa,
             s.declarado->>'telefone' AS telefone FROM notificacao_assinaturas a
             JOIN solicitacoes s ON s.id=a.solicitacao WHERE a.id=%s FOR UPDATE OF a''',
             (row['assinatura'],)).fetchone()
@@ -64,7 +64,7 @@ def prepare(row):
             (row['id'],row['reserva_token'])).fetchone()
         if not current:
             return False
-        if (not active or active['revogado_em'] or not active['verificado_em'] or
+        if (not active or active['revogado_em'] or (not active['verificado_em'] and not authorized_without_challenge(active['consentimento_versao'])) or
             active['telefone'] != row['telefone'] or active['status'] != row['status_origem'] or
             active['etapa'] != row['etapa_origem']):
             conn.execute("UPDATE notificacoes SET estado='cancelled',resultado='authorization_changed' WHERE id=%s",(row['id'],))

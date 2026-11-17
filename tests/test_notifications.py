@@ -208,11 +208,30 @@ class Notifications(unittest.TestCase):
             revoke(conn,sid)
         self.assertFalse(prepare(row))
 
-    def test_unverified_never_sent(self):
+    def test_direct_opt_in_without_false_verification(self):
+        from backend.notifications.worker import process_one
+        from backend.notifications.providers import MockProvider
+        self.clear_queue()
+        receipt = self.submit()
+        sid = self.latest()
+        self.assertEqual(self.post('notificacoes/estado', receipt.json).json['estado'], 'ativa')
+        with self.conn() as conn:
+            self.assertIsNone(conn.execute('SELECT verificado_em FROM notificacao_assinaturas WHERE solicitacao=%s',(sid,)).fetchone()['verificado_em'])
+        provider = MockProvider()
+        self.assertTrue(process_one(provider))
+        self.assertEqual(len(provider.messages), 1)
+        self.assertFalse(process_one(provider))
+        self.clear_queue()
+        self.submit(whatsapp_consent=False)
+        self.assertFalse(process_one(provider))
+
+    def test_legacy_unverified_never_sent(self):
         from backend.notifications.worker import process_one
         from backend.notifications.providers import MockProvider
         self.clear_queue()
         self.submit()
+        with self.conn() as conn:
+            conn.execute("UPDATE notificacao_assinaturas SET consentimento_versao='2026-11-17-v1' WHERE solicitacao=%s",(self.latest(),))
         provider = MockProvider()
         self.assertFalse(process_one(provider))
         self.assertEqual(provider.messages,[])

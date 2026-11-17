@@ -10,18 +10,21 @@ Telefone já existente em `solicitacoes.declarado.telefone` é normalizado para 
 nos novos cadastros. Não há outro campo de telefone no formulário nem na assinatura.
 A fila conserva o destinatário do envio. Registros antigos não recebem opt-in.
 
-O solicitante escolhe se o titular é solicitante ou responsável, aceita o texto
-versionado e recebe o código habitual. O titular envia `CONFIRMAR <desafio>` pelo
-próprio WhatsApp para o número institucional. O desafio é independente do código
-de consulta, expira em 15 minutos e só funciona uma vez. O banco guarda seu hash.
-A comparação usa o telefone informado pela Meta em um webhook autenticado. Se a
-Meta omitir esse telefone (por exemplo, identificação somente por BSUID), a
-ativação é recusada de forma segura. Não inferimos vínculo por nome ou username.
-A confirmação comprova controle do número, não identidade, filiação ou autorização
-de saída; a verificação institucional existente continua necessária.
+Nos novos cadastros, basta marcar a checkbox:
+“Autorizo o SISGECE a enviar pelo WhatsApp avisos sobre esta solicitação ao telefone informado.”
+O campo continua sendo o telefone de contato do responsável. A autorização v2
+libera o processamento automático pelo worker, sem botão ou desafio no WhatsApp.
+A checkbox começa desmarcada. A consulta pelo código permanece disponível.
+
+Esta alteração foi solicitada explicitamente pelo mantenedor. Não comprova posse
+do número: erros de digitação podem direcionar avisos a terceiros. `verificado_em`
+não é preenchido artificialmente. A instituição deve validar esse risco antes
+da ativação real. Autorizações v1 continuam exigindo a confirmação anterior;
+números antigos sem consentimento não são habilitados. As ferramentas de desafio
+permanecem apenas para compatibilidade com assinaturas v1.
 
 A revogação pode ser feita após consultar pelo código ou enviando PARAR, SAIR ou
-STOP do telefone verificado ao número institucional. Pelo WhatsApp, interrompe
+STOP do telefone cadastrado ao número institucional (remetente validado pelo webhook). Pelo WhatsApp, interrompe
 todas as assinaturas Meta desse telefone. Nenhuma mensagem de resposta é disparada.
 O portal mostra o estado atualizado. Uma autorização revogada não é reativada
 automaticamente. Não se pode recolher uma mensagem já despachada.
@@ -34,7 +37,7 @@ outbox, provedores, worker, webhook, rotas e ferramentas do operador.
 1. A rota valida o perfil e bloqueia a solicitação, como antes.
 2. A decisão, o evento de histórico e a fila são gravados na mesma transação.
 3. Um worker usa `FOR UPDATE SKIP LOCKED` para reservar uma pendência.
-4. Revalida consentimento, verificação, telefone e situação antes de despachar.
+4. Revalida consentimento, sua versão, telefone e situação antes de despachar.
 5. Grava o resultado sem expor payloads ou credenciais em logs.
 6. Webhooks atualizam a entrega, inclusive se chegarem antes da resposta HTTP.
 
@@ -45,8 +48,7 @@ uma aprovação perdendo sua notificação silenciosamente.
 Unicidade `(evento, canal, assinatura)` evita duplicação local. Não há unicidade
 por status: uma nova aprovação após reabertura é um novo evento legítimo.
 Mudanças novas cancelam avisos antigos ainda não despachados. Não se envia uma
-rajada de etapas antigas depois de o titular confirmar o número. Sem confirmação,
-a pendência não é enviada; avisos expiram após 24 horas. Esses prazos devem ser
+rajada de etapas antigas. Avisos expiram após 24 horas. Esses prazos devem ser
 validados pela instituição antes da ativação real.
 
 Estados: `pending`, `processing`, `sent` (aceita pelo provedor), `delivered`,
@@ -95,16 +97,9 @@ python -m backend.notifications.worker
 python -m backend.notifications.worker --once
 ```
 
-Crie um pedido fictício com opt-in. Clique em “Confirmar número no WhatsApp”. No
-mock, não aparece link para enviar mensagem real. Copie somente o token exibido:
-
-```sh
-python -m backend.notifications.admin mock-confirm
-```
-
-A ferramenta pede token e telefone fictício via entrada oculta. Só aceita
-assinaturas mock. Atualize a confirmação no portal. Para inspecionar o conteúdo
-padronizado, sem imprimir telefone:
+Crie um pedido fictício e marque a checkbox. Com o worker ativo, o aviso será
+processado automaticamente, sem confirmar número. O mock não faz chamadas
+externas, embora a interface não mostre textos técnicos de simulação.
 
 ```sh
 python -m backend.notifications.admin stats
@@ -207,7 +202,7 @@ Coordenação/superusuário veem os últimos 50 resultados no detalhe do pedido;
 recepção/portaria não acessam esses registros. Não há telefone, token, código de
 consulta ou resposta bruta da Meta nessa lista. Códigos de erro são sanitizados.
 
-- `pending`: verificar confirmação, vencimento, próxima tentativa e se o worker
+- `pending`: verificar consentimento (e confirmação apenas em autorizações v1), vencimento, próxima tentativa e se o worker
   usa o provedor correspondente. Credenciais inválidas não devem disparar retries.
 - `processing` além de 120 s: verificar processo/banco; recuperação ocorre no
   próximo ciclo. Não executar UPDATE manual para reenviar um despacho incerto.

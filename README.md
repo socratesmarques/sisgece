@@ -111,7 +111,7 @@ A CI exercita PostgreSQL 17, a imagem Docker e Chromium. O navegador usa apenas 
 
 ## Notificações opcionais pelo WhatsApp
 
-O SISGECE inclui consentimento específico, confirmação do telefone, revogação,
+O SISGECE inclui consentimento específico, envio automático após autorização, revogação,
 fila transacional e worker independente. A consulta pelo código continua igual.
 O provedor padrão é **mock**, sem rede ou cobrança. Telefones antigos não são
 considerados autorizados. Nenhum envio real ocorre sem habilitação explícita.

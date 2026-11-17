@@ -17,7 +17,7 @@ def subscribe(conn, sid, body):
         return
     if body.get('whatsapp_consent_version') != CONSENT_VERSION:
         raise ValueError('Leia e aceite a versão atual da autorização.')
-    target = body.get('whatsapp_recipient')
+    target = body.get('whatsapp_recipient', 'responsavel')
     if target not in ('solicitante', 'responsavel'):
         raise ValueError('Escolha quem receberá as notificações.')
     conn.execute('''INSERT INTO notificacao_assinaturas

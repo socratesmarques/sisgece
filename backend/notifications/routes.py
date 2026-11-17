@@ -4,7 +4,7 @@ import os
 
 from flask import abort, request
 
-from .config import CONSENT_TEXT, CONSENT_VERSION
+from .config import CONSENT_TEXT, CONSENT_VERSION, authorized_without_challenge
 from .consent import challenge, digest, revoke
 from .phone import masked
 
@@ -28,13 +28,13 @@ def register(app, db, query, value, limit, staff):
     @app.post('/api/notificacoes/estado')
     def notification_status():
         sid = lookup('whatsapp-status', 40)
-        row = query('''SELECT a.destinatario,a.verificado_em,a.revogado_em,
+        row = query('''SELECT a.destinatario,a.verificado_em,a.revogado_em,a.consentimento_versao,
             s.declarado->>'telefone' AS telefone FROM notificacao_assinaturas a
             JOIN solicitacoes s ON s.id=a.solicitacao WHERE a.solicitacao=%s''', (sid,)).fetchone()
         if not row:
             return {'estado': 'sem autorização'}
         return {'estado': 'revogada' if row['revogado_em'] else
-                'ativa' if row['verificado_em'] else 'aguardando confirmação',
+                'ativa' if row['verificado_em'] or authorized_without_challenge(row['consentimento_versao']) else 'aguardando confirmação',
                 'destinatario': row['destinatario'], 'telefone': masked(row['telefone'])}
 
     @app.post('/api/notificacoes/confirmar-numero')

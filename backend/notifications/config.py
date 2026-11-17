@@ -1,10 +1,13 @@
 import os
 
-CONSENT_VERSION = '2026-11-17-v1'
+CONSENT_VERSION = '2026-11-17-v2'
 CONSENT_TEXT = ('Autorizo o SISGECE a enviar pelo WhatsApp avisos sobre esta solicitação '
-                'ao telefone informado. Confirmo que sou titular do número ou tenho '
-                'autorização do titular, que deverá confirmar a ativação no WhatsApp. '
-                'Posso revogar a autorização a qualquer momento. A consulta pelo código continua disponível.')
+                'ao telefone informado.')
+
+
+def authorized_without_challenge(version):
+    # Não transforma autorizações antigas em opt-in sem confirmação.
+    return version == CONSENT_VERSION
 
 
 def provider_name():
