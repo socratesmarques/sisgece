@@ -13,7 +13,7 @@ from urllib.request import Request
 
 from .config import real_enabled
 from .meta import http_send
-from .outbox import TEMPLATES
+from .outbox import TEMPLATES, message_text
 from .phone import normalize_phone
 from .providers import Result
 
@@ -58,7 +58,7 @@ class EvolutionProvider:
         kind = notification.get('template_tipo')
         if kind not in TEMPLATES:
             return Result('failed', 'invalid_message_type')
-        text = TEMPLATES[kind][1]
+        text = message_text(kind)
         payload = {'number': phone.lstrip('+'), 'text': text}
         request = Request(self.url, data=json.dumps(payload).encode('utf-8'),
                           headers={'apikey': self.key, 'Content-Type': 'application/json'},
