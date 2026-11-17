@@ -135,14 +135,20 @@ if ($("pedido")) {
     );
   });
   form.addEventListener("reset", () => form.telefone.setCustomValidity(""));
+  const feedbackToggle = form.elements.whatsapp_feedback_consent;
+  form.elements.whatsapp_consent.addEventListener("change", () => {
+    feedbackToggle.disabled = !form.elements.whatsapp_consent.checked;
+    if (feedbackToggle.disabled) feedbackToggle.checked = false;
+  });
+  feedbackToggle.disabled = true;
   bind("pedido", async (body) => {
     body.whatsapp_consent = form.elements.whatsapp_consent.checked;
+    body.whatsapp_feedback_consent = form.elements.whatsapp_feedback_consent.checked && body.whatsapp_consent;
     body.whatsapp_consent_version = form.elements.whatsapp_consent.dataset.version;
     const result = await api("solicitar", body);
     $("recibo").textContent =
       ("Solicitação salva. " + (body.tipo === "Entrada" ? "Seu pedido de entrada aguarda análise da coordenação." : "O envio ainda não autoriza a saída.")) + " Guarde seu código.\nCódigo de consulta: " +
       result.codigo;
-    $("rastrear").elements.codigo.value = result.codigo;
     $("copiar").hidden = false;
     $("copiar").onclick = () =>
       run(async () => {
@@ -150,23 +156,11 @@ if ($("pedido")) {
         $("aviso").textContent = "Código copiado.";
       });
     form.reset();
+    feedbackToggle.disabled = true;
     movementGuide();
     form.origem.onchange();
     $("recibo").focus();
     void notificationStatus(result.codigo);
-  });
-  bind("rastrear", async (body) => {
-    $("resultado").textContent = "";
-    const r = await api("consulta", body);
-    $("resultado").textContent = [
-      r.tipo,
-      r.status,
-      r.status === "APROVADA" ? r.etapa : "",
-      r.mensagem,
-    ]
-      .filter(Boolean)
-      .join(" · ");
-    void notificationStatus(body.codigo);
   });
 } else {
   bind("login", async (body) => {
@@ -502,6 +496,6 @@ async function notificationStatus(code) {
     }
   } catch (_) {
     if (version !== notificationRequest) return;
-    node(el, "p", "Não foi possível consultar as notificações. Seu código continua válido para acompanhar a solicitação.");
+    node(el, "p", "Não foi possível consultar o estado das notificações. Guarde seu código para atendimento.");
   }
 }
