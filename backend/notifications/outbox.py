@@ -63,9 +63,34 @@ def public_link():
         return ''
 
 
-def message_text(action):
-    """Texto para o transporte mock/Evolution; nunca substitui os templates Meta aprovados."""
+def approval_details(notification):
+    """Resumo mínimo do pedido, exclusivamente após autorização do worker."""
+    if not notification:
+        return ''
+    kind = notification.get('solicitacao_tipo')
+    if kind not in ('Entrada', 'Saída'):
+        return ''
+    day = notification.get('solicitacao_data')
+    hour = notification.get('solicitacao_horario')
+    # Datas/horários são objetos SQL tipados; não interpolar dados arbitrários.
+    from datetime import date, time
+    if not isinstance(day, date):
+        return ''
+    if not isinstance(hour, time):
+        return ''
+    return ('*Informações da solicitação*\\n'
+            f'Tipo: {kind}\\n'
+            f'Data: {day:%d/%m/%Y}\\n'
+            f'Horário: {hour:%H:%M}')
+
+
+def message_text(action, notification=None):
+    """Texto mock/Evolution; não altera os templates aprovados da Meta."""
     content = TEMPLATES[action][1]
+    if action == 'aprovar':
+        details = approval_details(notification)
+        if details:
+            content += '\\n\\n' + details
     link = public_link()
     consultation = ('Para acompanhar o andamento e consultar os detalhes, acesse:\n' + link
                     if link else 'Para acompanhar o andamento, consulte o portal oficial do SISGECE.')
