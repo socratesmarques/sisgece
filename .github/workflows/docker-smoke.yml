@@ -15,6 +15,8 @@ jobs:
       PGUSER: postgres
       PGPASSWORD: teste-ci
       LOCAL_HTTP: "1"
+      NOTIFICATIONS_PROVIDER: mock
+      WHATSAPP_REAL_SEND_ENABLED: "0"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -29,3 +31,7 @@ jobs:
       - run: python tests/browser.py
         env:
           TEST_URL: http://localhost:3000
+      - run: python tests/browser_notifications.py
+        env:
+          TEST_URL: http://localhost:3000
+      - run: docker run --rm --network host -e PGHOST -e PGUSER -e PGPASSWORD -e NOTIFICATIONS_PROVIDER -e WHATSAPP_REAL_SEND_ENABLED sisgece:ci python -m backend.notifications.worker --once

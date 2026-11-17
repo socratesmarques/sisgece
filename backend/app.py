@@ -270,7 +270,7 @@ def submit():
     if (
         data["origem"] not in ("Aluno", "Responsável")
         or not re.fullmatch(r"[0-9 ()+-]+", data["telefone"])
-        or not 10 <= len(re.sub(r"\D", "", data["telefone"])) <= 13
+        or not 10 <= len(re.sub(r"\D", "", data["telefone"])) <= 15
     ):
         abort(400, "Tipo ou telefone inválido.")
     try:

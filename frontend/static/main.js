@@ -65,7 +65,7 @@ function formatCpf(value) {
   return formatDigits(value.replace(/\D/g, "").slice(0, 11), "###.###.###-##");
 }
 function formatPhone(value) {
-  const digits = value.replace(/\D/g, "").slice(0, 13);
+  const digits = value.replace(/\D/g, "").slice(0, 15);
   const countryCode = value.trim().startsWith("+55") || (digits.startsWith("55") && digits.length > 11);
   if (countryCode) {
     return formatDigits(digits, digits.length > 12 ? "+## (##) #####-####" : "+## (##) ####-####");
@@ -128,7 +128,7 @@ if ($("pedido")) {
     const digits = value.replace(/\D/g, "");
     const valid = value.startsWith("+55")
       ? [12, 13].includes(digits.length)
-      : value.startsWith("+") ? digits.length >= 10 && digits.length <= 13
+      : value.startsWith("+") ? digits.length >= 10 && digits.length <= 15
         : [10, 11].includes(digits.length);
     form.telefone.setCustomValidity(
       !value || valid ? "" : "Informe o telefone completo com DDD.",

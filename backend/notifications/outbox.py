@@ -1,5 +1,4 @@
 import os
-import re
 
 TEMPLATES = {
     'cadastro': ('sisgece_cadastro', 'SISGECE — Sua solicitação foi cadastrada. Consulte o portal oficial para acompanhar o andamento.'),

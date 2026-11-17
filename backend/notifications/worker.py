@@ -1,7 +1,6 @@
 """python -m backend.notifications.worker [--once]. Somente fila PostgreSQL."""
 import argparse
 import hashlib
-import os
 import random
 import secrets
 import signal
@@ -28,7 +27,7 @@ def recover(conn):
     conn.execute('''UPDATE notificacoes SET
         estado=CASE WHEN despacho_em IS NULL THEN 'pending' ELSE 'uncertain' END,
         resultado=CASE WHEN despacho_em IS NULL THEN 'lease_recovered' ELSE 'dispatch_interrupted' END,
-        reserva_token=NULL,reserva_ate=NULL
+        reserva_token=CASE WHEN despacho_em IS NULL THEN NULL ELSE reserva_token END,reserva_ate=NULL
         WHERE estado='processing' AND reserva_ate<clock_timestamp()''')
     conn.execute('''UPDATE notificacoes n SET estado='cancelled',resultado='expired_or_superseded'
         FROM notificacao_assinaturas a,solicitacoes s
@@ -101,12 +100,13 @@ def finish(row, result):
             return
         if current['reserva_token'] != row['reserva_token']:
             return
-        if current['estado'] != 'processing':
+        if current['estado'] != 'processing' and not (current['estado']=='uncertain' and result.state=='sent'):
             return
         state = result.state
         if state == 'retry':
             state = 'failed' if current['tentativas'] >= MAX_ATTEMPTS else 'pending'
         delay = min(3600,30 * 2 ** max(0,current['tentativas']-1)) + random.randint(0,15)
+        delay = max(delay,result.retry_after)
         conn.execute('''UPDATE notificacoes SET estado=%s,resultado=%s,
             externo_id=coalesce(externo_id,%s),
             enviado_em=CASE WHEN %s='sent' THEN coalesce(enviado_em,clock_timestamp()) ELSE enviado_em END,

@@ -11,6 +11,7 @@ class Result:
     state: str
     code: str
     external_id: str | None = None
+    retry_after: int = 0
 
 
 class Provider(Protocol):

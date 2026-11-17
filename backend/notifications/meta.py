@@ -67,7 +67,11 @@ class MetaProvider:
             label = 'meta_' + str(code) if code is not None else 'http_' + str(error.code)
             # Somente respostas explícitas de rejeição temporária permitem reenviar.
             if code in (4,80007,80008,130429,131056,131048) or error.code==429:
-                return Result('retry',label)
+                try:
+                    retry_after = max(0,min(86400,int(error.headers.get('Retry-After','0'))))
+                except (ValueError,TypeError,AttributeError):
+                    retry_after = 0
+                return Result('retry',label,retry_after=retry_after)
             if error.code>=500:
                 return Result('uncertain',label)
             return Result('failed',label)

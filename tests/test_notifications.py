@@ -280,6 +280,84 @@ class Notifications(unittest.TestCase):
             self.assertEqual(self.client.post('/api/notificacoes/webhook',data=b'x'*1048577).status_code,413)
 
 
+    def test_all_transitions_and_staff_visibility(self):
+        from werkzeug.security import generate_password_hash
+        self.submit()
+        sid = self.latest()
+        clients = {}
+        for role in ('coordenação','recepção','portaria','superusuário'):
+            name = 'u'+secrets.token_hex(6)
+            with self.conn() as conn:
+                conn.execute("INSERT INTO administradores(nome,usuario,senha_hash,perfil) VALUES ('Teste',%s,%s,%s)",(name,generate_password_hash('test-password'),role))
+            client = app.test_client()
+            self.assertEqual(client.post('/api/login',json={'usuario':name,'senha':'test-password'},headers={'X-SISGECE':'1'}).status_code,200)
+            clients[role]=client
+            result = client.get('/api/pedidos/'+str(sid)+'/notificacoes')
+            self.assertEqual(result.status_code,200 if role in ('coordenação','superusuário') else 403)
+            if result.status_code==200:
+                self.assertNotIn('telefone',str(result.json))
+        actions = [('coordenação','aprovar'),('recepção','recepção'),('portaria','portaria'),
+                   ('coordenação','corrigir portaria'),('portaria','portaria'),
+                   ('coordenação','corrigir recepção'),('coordenação','reabrir análise'),
+                   ('coordenação','reprovar')]
+        for role,action in actions:
+            response = clients[role].post('/api/pedidos/'+str(sid),json={'acao':action,'nota':'Teste','mensagem':'Mensagem privada da decisão'},headers={'X-SISGECE':'1'})
+            self.assertEqual(response.status_code,200,(action,response.json))
+        with self.conn() as conn:
+            rows = conn.execute('SELECT template_tipo,estado FROM notificacoes WHERE solicitacao=%s ORDER BY id',(sid,)).fetchall()
+            self.assertEqual([r['template_tipo'] for r in rows],['cadastro']+[action for _,action in actions])
+            self.assertEqual([r['estado'] for r in rows],['cancelled']*len(actions)+['pending'])
+        self.submit(tipo='Entrada')
+        entry = self.latest()
+        response = clients['recepção'].post('/api/pedidos/'+str(entry),json={'acao':'recepção'},headers={'X-SISGECE':'1'})
+        self.assertEqual(response.status_code,409)
+        with self.conn() as conn:
+            self.assertEqual(conn.execute('SELECT count(*) AS n FROM notificacoes WHERE solicitacao=%s',(entry,)).fetchone()['n'],1)
+
+    def test_retry_exhaustion_and_rate_limit(self):
+        from backend.notifications.worker import process_one
+        from backend.notifications.providers import MockProvider
+        self.clear_queue()
+        sid = self.verified()
+        for attempt in range(5):
+            with self.conn() as conn:
+                conn.execute('TRUNCATE notificacao_ritmo')
+                conn.execute('UPDATE notificacoes SET proxima_tentativa=now() WHERE solicitacao=%s',(sid,))
+            self.assertTrue(process_one(MockProvider('temporary')))
+        with self.conn() as conn:
+            row = conn.execute('SELECT estado,tentativas FROM notificacoes WHERE solicitacao=%s',(sid,)).fetchone()
+            self.assertEqual(row,{'estado':'failed','tentativas':5})
+        self.clear_queue()
+        self.verified()
+        self.assertTrue(process_one(MockProvider()))
+        sid = self.verified()
+        mock = MockProvider()
+        self.assertTrue(process_one(mock))
+        self.assertEqual(mock.messages,[])
+        with self.conn() as conn:
+            row = conn.execute('SELECT estado,tentativas FROM notificacoes WHERE solicitacao=%s',(sid,)).fetchone()
+            self.assertEqual(row,{'estado':'pending','tentativas':0})
+
+    def test_expiration_and_late_response(self):
+        from backend.notifications.worker import claim, prepare, recover, finish, process_one
+        from backend.notifications.providers import MockProvider, Result
+        self.clear_queue()
+        sid = self.verified()
+        with self.conn() as conn:
+            conn.execute("UPDATE notificacoes SET expira_em=now()-interval '1 second' WHERE solicitacao=%s",(sid,))
+        self.assertFalse(process_one(MockProvider()))
+        self.clear_queue()
+        self.verified()
+        row = claim('mock')
+        self.assertTrue(prepare(row))
+        with self.conn() as conn:
+            conn.execute("UPDATE notificacoes SET reserva_ate=now()-interval '1 second' WHERE id=%s",(row['id'],))
+            recover(conn)
+        finish(row,Result('sent','late_response','mock-late'))
+        with self.conn() as conn:
+            self.assertEqual(conn.execute('SELECT estado,externo_id FROM notificacoes WHERE id=%s',(row['id'],)).fetchone(),{'estado':'sent','externo_id':'mock-late'})
+
+
 class MetaTransport(unittest.TestCase):
     def setUp(self):
         self.config = patch.dict(os.environ,{'WHATSAPP_REAL_SEND_ENABLED':'1',
@@ -333,3 +411,10 @@ class MetaTransport(unittest.TestCase):
         self.assertIsNone(NoRedirect().redirect_request(None,None,302,'',{},'https://other.example'))
         self.assertEqual(MetaProvider().send(dict(self.row,template_nome='../bad')).state,'failed')
         self.http.assert_not_called()
+
+    def test_retry_after(self):
+        from io import BytesIO
+        from urllib.error import HTTPError
+        from backend.notifications.meta import MetaProvider
+        self.http.side_effect = HTTPError('https://graph.facebook.com',429,'test',{'Retry-After':'300'},BytesIO(b'{"error":{"code":130429}}'))
+        self.assertEqual(MetaProvider().send(self.row).retry_after,300)

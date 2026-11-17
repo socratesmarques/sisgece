@@ -61,3 +61,29 @@ na consulta. Resultado de envio somente para coordenação/superusuário.
   processar, revogar e continuar consultando.
 - Uma execução inicial encontrou orçamento compartilhado de consultas/ações;
   contadores separados corrigiram o problema. A repetição completa passou.
+
+## Incremento 7 e validação final
+
+- `python -m unittest discover -s tests -v`: **25 testes aprovados**, 10,104 s.
+  Inclui os cinco testes originais. Cobertura adicional: todas as transições
+  institucionais existentes, permissões dos quatro perfis, limite de tentativas,
+  ritmo compartilhado, expiração, Retry-After e resposta tardia após reserva expirada.
+- `git diff --check`, compilação dos módulos Python e `node --check
+  frontend/static/main.js`: sem erros.
+- Build Docker inicial encontrou CA do proxy ausente. Repetido com Dockerfile
+  temporário fora do repositório e CA montada como segredo BuildKit, apenas para
+  o pip; TLS permaneceu validado e nenhuma CA foi copiada para a imagem final.
+- Primeira inicialização Docker encontrou permissões 600/700 do checkout desta
+  máquina. Dockerfile corrigido para tornar código empacotado legível pelo usuário
+  não-root. Imagem reconstruída com sucesso.
+- Imagem final executada como `sisgece`, `--read-only`, tmpfs, sem capabilities,
+  no-new-privileges e publicação apenas em loopback. `/api/ready`: HTTP 200,
+  `{"ok":true}`. Migração aplicada ao banco descartável `sisgece_review`.
+- Contra essa imagem: `tests/browser.py` aprovado, incluindo operações originais
+  e responsividade; `tests/browser_notifications.py` aprovado em 390/1280 px.
+- Worker da mesma imagem executado em contêiner separado, sem portas,
+  `python -m backend.notifications.worker --once`: saída 0.
+
+Não houve tráfego real de mensagens Meta, configuração de cobrança, acesso ao
+servidor de produção ou merge. Homologação com conta/template real e revisão
+institucional permanecem necessárias antes da habilitação real.

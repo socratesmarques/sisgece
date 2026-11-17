@@ -53,3 +53,6 @@ __pycache__/
 *.dump
 
 *.env.local
+
+# Arquivos locais de desenvolvimento
+work/
