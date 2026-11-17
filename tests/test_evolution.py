@@ -78,6 +78,8 @@ class EvolutionTransport(unittest.TestCase):
         body = json.loads(self.http.call_args.args[0].data)
         for expected in ('Tipo: Saída', 'Data: 02/01/2030', 'Horário: 14:30'):
             self.assertIn(expected, body['text'])
+        self.assertIn('*Informações da solicitação*\nTipo: Saída\nData: 02/01/2030\nHorário: 14:30', body['text'])
+        self.assertNotIn(r'\\n', body['text'])
         for private in ('NOME PRIVADO', 'MATRICULA PRIVADA', 'JUSTIFICATIVA PRIVADA'):
             self.assertNotIn(private, body['text'])
 
