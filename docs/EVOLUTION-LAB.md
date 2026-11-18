@@ -206,3 +206,59 @@ WhatsApp; é necessário um teste separado com dois números consentidos
 Para desativar imediatamente, pare o worker de testes, altere
 `EVOLUTION_FEEDBACK_ENABLED=0` no app/worker, recrie os
 contêineres e desabilite o webhook na instância da Evolution.
+
+
+## Formulário sem checkboxes: fluxo automático de laboratório
+
+A interface não solicita duas autorizações na sequência do telefone.
+Em vez disso, mostra uma nota informativa. **O modo automático funciona
+somente no WSL local, para números de teste previamente autorizados.**
+Não equivale a consentimento para uso institucional e não deve ser
+habilitado com dados reais.
+
+O formulário envia uma solicitação normalmente, sem flags ocultas de
+consentimento. O servidor cadastra a notificação automática somente se:
+
+- `LOCAL_HTTP=1`;
+- `NOTIFICATIONS_PROVIDER=evolution`;
+- `EVOLUTION_LAB_ENABLED=1`;
+- `EVOLUTION_LAB_AUTO_FLOW=1`;
+- o número informado estiver em `EVOLUTION_ALLOWED_RECIPIENTS`.
+
+As assinaturas automáticas ficam identificadas com a versão
+`2026-11-17-lab-auto`, distinta do consentimento explícito anterior.
+O worker só processa essa versão de assinatura quando as duas flags
+de laboratório estão ativas. Não há envio automático no modo mock,
+Meta ou em implantação sem essas flags.
+
+Em `app.evolution.env.local` adicione, exclusivamente no WSL:
+
+```ini
+EVOLUTION_LAB_ENABLED=1
+EVOLUTION_LAB_AUTO_FLOW=1
+EVOLUTION_ALLOWED_RECIPIENTS=+5585987654321
+```
+
+No `worker.evolution.env.local`, mantenha a allowlist e
+`EVOLUTION_LAB_ENABLED=1`, e acrescente:
+
+```ini
+EVOLUTION_LAB_AUTO_FLOW=1
+```
+
+Substitua o número de exemplo pelo mesmo número de teste autorizado.
+A pesquisa de satisfação faz parte desse fluxo apenas quando
+`EVOLUTION_FEEDBACK_ENABLED=1` no aplicativo e no worker e o webhook
+privado foi configurado. Nenhum destinatário fora da allowlist terá
+assinatura automática ou receberá mensagens.
+
+**Recrie ambos os contêineres** para aplicar flags novas; um simples
+`docker restart` não relê arquivos de ambiente. O banco PostgreSQL
+e os volumes não devem ser removidos. Para desligar o fluxo automático,
+pare o worker, altere `EVOLUTION_LAB_AUTO_FLOW=0` no app e no worker
+e recrie os contêineres. Convites em andamento devem ser revogados
+pelos controles de código e devem permanecer somente com números fictícios.
+
+A implantação institucional precisa definir base adequada e transparência
+para comunicação por WhatsApp, não reaproveitar a assinatura automática
+de laboratório.
