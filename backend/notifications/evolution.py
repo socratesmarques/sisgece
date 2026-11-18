@@ -1,4 +1,4 @@
-"""Transporte experimental Evolution API para laboratório local, nunca produção.
+"""Transporte Evolution API com validação de telefone e controle de envio.
 
 Não registra tokens, telefones, URLs ou respostas brutas nos resultados.
 A confirmação de envio HTTP não é comprovante de entrega no WhatsApp.
@@ -38,12 +38,6 @@ class EvolutionProvider:
             raise ValueError('Nome da instância inválido.')
         if not self.key or any(c in self.key for c in '\r\n'):
             raise ValueError('Configure EVOLUTION_API_KEY.')
-        raw = os.getenv('EVOLUTION_ALLOWED_RECIPIENTS', '')
-        if not raw or any(not part.strip() for part in raw.split(',')):
-            raise ValueError('Configure destinatários autorizados de teste.')
-        self.recipients = frozenset(normalize_phone(part.strip()) for part in raw.split(','))
-        if not self.recipients or len(self.recipients) > 5:
-            raise ValueError('Use entre 1 e 5 números de teste.')
         self.url = endpoint.rstrip('/') + '/message/sendText/' + quote(instance, safe='')
 
     def send(self, notification):
@@ -53,8 +47,6 @@ class EvolutionProvider:
             phone = normalize_phone(notification['telefone'])
         except (KeyError, ValueError):
             return Result('failed', 'invalid_recipient')
-        if phone not in self.recipients:
-            return Result('failed', 'recipient_not_allowlisted')
         kind = notification.get('template_tipo')
         if kind not in TEMPLATES:
             return Result('failed', 'invalid_message_type')
