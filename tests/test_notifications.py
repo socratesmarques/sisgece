@@ -54,6 +54,9 @@ class Notifications(unittest.TestCase):
                     tipo='Saída',data='2030-01-01',hora='12:00',justificativa='Teste',
                     whatsapp_consent=True,whatsapp_consent_version=CONSENT_VERSION,
                     whatsapp_recipient='responsavel')
+        # Reproduz o formulário atual: sem caixas ou campos ocultos de autorização.
+        if kw.pop('without_whatsapp_fields', False):
+            body = {key: val for key, val in body.items() if not key.startswith('whatsapp_')}
         body.update(kw)
         return self.post('solicitar', body)
 
@@ -110,8 +113,7 @@ class Notifications(unittest.TestCase):
             'EVOLUTION_FEEDBACK_ENABLED': '1',
         }):
             for phone in ('85987654321', '85988887777'):
-                receipt = self.submit(telefone=phone, whatsapp_consent=False,
-                                      whatsapp_feedback_consent=False)
+                receipt = self.submit(telefone=phone, without_whatsapp_fields=True)
                 self.assertEqual(receipt.status_code, 201)
                 sid = self.latest()
                 with self.conn() as conn:
@@ -136,7 +138,7 @@ class Notifications(unittest.TestCase):
             'EVOLUTION_FEEDBACK_ENABLED': '0',
             'EVOLUTION_ALLOWED_RECIPIENTS': '',
         }):
-            receipt = self.submit(whatsapp_consent=False)
+            receipt = self.submit(without_whatsapp_fields=True)
             self.assertEqual(receipt.status_code, 201)
             with self.conn() as conn:
                 row = conn.execute("SELECT avaliacao_consentida FROM notificacao_assinaturas WHERE solicitacao=%s",
