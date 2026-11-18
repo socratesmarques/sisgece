@@ -14,6 +14,7 @@ from flask import Flask, abort, g, jsonify, render_template, request
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from backend.notifications.webhooks import register as register_webhook
+from backend.notifications.feedback import register as register_evolution_feedback
 from backend.notifications.outbox import enqueue
 from backend.notifications.config import CONSENT_VERSION, CONSENT_TEXT
 from backend.notifications.phone import normalize_phone
@@ -83,7 +84,7 @@ def database_error(e):
 
 @app.before_request
 def protect():
-    if request.endpoint == "whatsapp_webhook":
+    if request.endpoint in ("whatsapp_webhook", "evolution_feedback_webhook"):
         request.max_content_length = 1048576
         return
     if request.method == "POST":
@@ -589,3 +590,5 @@ def account():
 register_notifications(app, db, query, value, limit, staff)
 
 register_webhook(app, db)
+
+register_evolution_feedback(app, db)
