@@ -47,8 +47,7 @@ allowlist comporta no máximo cinco números. O backend pode continuar com
 
 **Importante:** o provedor é selecionado no momento do cadastro, e fica
 registrado na assinatura e na fila. Solicitações antigas marcadas como
-`mock` não se transformam em Evolution após mudar o ambiente. Gere uma
-solicitação fictícia nova, com consentimento específico.
+`mock` não se transformam em Evolution após mudar o ambiente. Gere uma solicitação fictícia nova e use apenas um número de teste autorizado.
 
 Para uma checagem sem envio, mantenha as flags em 0 ou execute somente os
 testes com transporte substituído:
@@ -102,10 +101,11 @@ gerenciados na plataforma Meta e não são alterados por esses textos.
 
 ## Pesquisa opcional de satisfação via WhatsApp
 
-**Experimental e desativada por padrão.** O formulário oferece uma
-autorização específica para receber um convite de avaliação. Marcar
-autorização de avisos NÃO marca automaticamente o convite de avaliação.
-Consentimentos de solicitações antigas não são convertidos.
+**Experimental e desativada por padrão.** No laboratório, o formulário não
+exibe caixas de autorização: o número deve estar previamente autorizado na
+allowlist e o fluxo automático deve estar habilitado. O convite só integra o
+aviso final com `EVOLUTION_FEEDBACK_ENABLED=1`, nunca em dados institucionais.
+Assinaturas de solicitações antigas não são convertidas em automáticas.
 
 No encerramento do pedido — **saída registrada na portaria, aprovação
 de entrada ou solicitação recusada** — a notificação final pelo provedor
