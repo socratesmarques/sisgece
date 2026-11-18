@@ -2,7 +2,7 @@ import hashlib
 import os
 import secrets
 
-from .config import CONSENT_VERSION, provider_name, lab_auto_recipient
+from .config import CONSENT_VERSION, LAB_AUTO_VERSION, provider_name, lab_auto_recipient
 from .phone import normalize_phone
 
 
@@ -35,7 +35,7 @@ def subscribe(conn, sid, body):
         raise ValueError('Escolha quem receberá as notificações.')
     conn.execute('''INSERT INTO notificacao_assinaturas
         (solicitacao,destinatario,provedor,consentimento_versao,avaliacao_consentida) VALUES (%s,%s,%s,%s,%s)''',
-        (sid, target, provider_name(), CONSENT_VERSION, feedback))
+        (sid, target, provider_name(), LAB_AUTO_VERSION if automatic else CONSENT_VERSION, feedback))
 
 
 def challenge(conn, sid):
