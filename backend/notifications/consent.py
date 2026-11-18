@@ -2,7 +2,7 @@ import hashlib
 import os
 import secrets
 
-from .config import CONSENT_VERSION, LAB_AUTO_VERSION, provider_name, lab_auto_recipient
+from .config import CONSENT_VERSION, AUTO_CONTACT_VERSION, provider_name, automatic_notifications_enabled
 from .phone import normalize_phone
 
 
@@ -18,9 +18,10 @@ def subscribe(conn, sid, body):
     if type(feedback) is not bool:
         raise ValueError('Autorização de avaliação inválida.')
 
-    # Apenas dados fictícios e números autorizados: a solicitação inicia o
-    # fluxo de teste sem checkboxes. Não tratar como consentimento institucional.
-    automatic = (not consent and lab_auto_recipient(body.get('telefone', '')))
+    # No provedor Evolution, o aviso do formulário informa que mensagens
+    # de status são parte do fluxo de cada solicitação, sem caixas adicionais.
+    # Não reutiliza a versão de consentimento explícito nem a versão do laboratório.
+    automatic = not consent and automatic_notifications_enabled()
     if automatic:
         consent = True
         feedback = os.getenv('EVOLUTION_FEEDBACK_ENABLED') == '1'
@@ -35,7 +36,7 @@ def subscribe(conn, sid, body):
         raise ValueError('Escolha quem receberá as notificações.')
     conn.execute('''INSERT INTO notificacao_assinaturas
         (solicitacao,destinatario,provedor,consentimento_versao,avaliacao_consentida) VALUES (%s,%s,%s,%s,%s)''',
-        (sid, target, provider_name(), LAB_AUTO_VERSION if automatic else CONSENT_VERSION, feedback))
+        (sid, target, provider_name(), AUTO_CONTACT_VERSION if automatic else CONSENT_VERSION, feedback))
 
 
 def challenge(conn, sid):
