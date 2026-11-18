@@ -10,7 +10,7 @@ import time
 import psycopg
 from psycopg.rows import dict_row
 
-from .config import provider_name, CONSENT_VERSION, LAB_AUTO_VERSION, authorized_without_challenge
+from .config import provider_name, CONSENT_VERSION, LAB_AUTO_VERSION, AUTO_CONTACT_VERSION, authorized_without_challenge
 from .providers import MockProvider, Result
 from .webhooks import reconcile
 
@@ -41,8 +41,10 @@ def claim(provider):
     with connection() as conn:
         recover(conn)
         accepted = [CONSENT_VERSION]
-        if provider == 'evolution' and os.getenv('EVOLUTION_LAB_ENABLED') == '1' and os.getenv('EVOLUTION_LAB_AUTO_FLOW') == '1':
-            accepted.append(LAB_AUTO_VERSION)
+        if provider == 'evolution':
+            accepted.append(AUTO_CONTACT_VERSION)
+            if os.getenv('EVOLUTION_LAB_ENABLED') == '1' and os.getenv('EVOLUTION_LAB_AUTO_FLOW') == '1':
+                accepted.append(LAB_AUTO_VERSION)
         row = conn.execute('''SELECT n.* FROM notificacoes n
             JOIN notificacao_assinaturas a ON a.id=n.assinatura
             WHERE n.estado='pending' AND n.provedor=%s AND (a.verificado_em IS NOT NULL OR a.consentimento_versao=ANY(%s))
