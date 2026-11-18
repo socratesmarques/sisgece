@@ -1,13 +1,18 @@
 import os
 
 CONSENT_VERSION = '2026-11-17-v2'
+LAB_AUTO_VERSION = '2026-11-17-lab-auto'
 CONSENT_TEXT = ('Autorizo o SISGECE a enviar pelo WhatsApp avisos sobre esta solicitação '
                 'ao telefone informado.')
 
 
 def authorized_without_challenge(version):
     # Não transforma autorizações antigas em opt-in sem confirmação.
-    return version == CONSENT_VERSION
+    return version == CONSENT_VERSION or (
+        version == LAB_AUTO_VERSION
+        and provider_name() == 'evolution'
+        and os.getenv('EVOLUTION_LAB_ENABLED') == '1'
+        and os.getenv('EVOLUTION_LAB_AUTO_FLOW') == '1')
 
 
 def provider_name():
