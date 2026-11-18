@@ -4,7 +4,8 @@ O link público é opcional: até o operador definir uma URL HTTPS válida, nenh
 mensagem terá placeholder, URL local ou endereço inventado.
 """
 import os
-from urllib.parse import urlsplit
+import re
+import secrets
 
 HEADER = '*SISGECE | IFCE Campus Maranguape*'
 FOOTER = 'Esta é uma mensagem automática. Não é necessário responder.'
@@ -20,9 +21,7 @@ TEMPLATES = {
         'estabelecidas pela instituição.'),
     'reprovar': ('sisgece_atualizacao',
         'Informamos que, após análise da coordenação, sua solicitação *não foi aprovada*.\n\n'
-        'Para consultar a justificativa registrada e outras informações sobre a decisão, '
-        'acesse o portal do SISGECE.\n\n'
-        'Em caso de dúvidas, procure a coordenação do campus.'),
+        'Em caso de dúvidas sobre a decisão registrada, procure a coordenação do campus.'),
     'recepção': ('sisgece_etapa',
         'Informamos que a etapa de *conferência pela recepção* referente à sua solicitação '
         'de saída foi concluída.\n\n'
@@ -43,24 +42,6 @@ TEMPLATES = {
         'solicitação de saída.\n\n'
         'O histórico e a situação atualizada estão disponíveis para consulta no sistema.'),
 }
-
-
-def public_link():
-    """Somente HTTPS público; não usa localhost, IP ou URLs com credenciais."""
-    raw = os.getenv('SISGECE_PUBLIC_URL', '').strip()
-    if not raw:
-        return ''
-    try:
-        url = urlsplit(raw)
-        host = url.hostname or ''
-        if (url.scheme != 'https' or not host or '.' not in host or
-                host in ('localhost', '127.0.0.1') or host.endswith('.local') or
-                url.username or url.password or url.port or url.query or url.fragment or
-                any(c.isspace() for c in raw) or len(raw) > 240):
-            return ''
-        return raw.rstrip('/')
-    except ValueError:
-        return ''
 
 
 def approval_details(notification):
@@ -85,18 +66,60 @@ def approval_details(notification):
 
 
 def message_text(action, notification=None):
-    """Texto mock/Evolution; não altera os templates aprovados da Meta."""
+    """Texto mock/Evolution; não modifica templates Meta aprovados."""
     content = TEMPLATES[action][1]
     if action == 'aprovar':
         details = approval_details(notification)
         if details:
             content += '\n\n' + details
-    link = public_link()
-    consultation = ('Para acompanhar o andamento e consultar os detalhes, acesse:\n' + link
-                    if link else 'Para acompanhar o andamento, consulte o portal oficial do SISGECE.')
+    code = notification.get('avaliacao_codigo') if notification else None
+    invitation = bool(
+        action in ('aprovar', 'reprovar', 'portaria')
+        and isinstance(code, str)
+        and re.fullmatch(r'[A-F0-9]{16}', code)
+    )
+    if invitation:
+        content += (
+            '\n\n*Avaliação opcional do SISGECE*\n'
+            'Como você avalia o atendimento recebido? '
+            'Escolha uma nota de 1 (muito ruim) a 5 (excelente).\n'
+            f'Para avaliar, responda exatamente: AVALIAR {code} 5\n'
+            'Substitua o último número pela nota desejada. '
+            'Você pode ignorar este convite.'
+        )
     footer = ('Esta é uma mensagem automática do Sistema de Gerenciamento de Entrada e Saída '
-              'de Estudantes.' if action == 'cadastro' else FOOTER)
-    return f'{HEADER}\n\n{content}\n\n{consultation}\n\n{footer}'
+              'de Estudantes.' if action == 'cadastro' else
+              'Esta é uma mensagem automática. Sua resposta será registrada apenas se você optar por avaliar.'
+              if invitation else FOOTER)
+    return f'{HEADER}\n\n{content}\n\n{footer}'
+
+
+def enqueue_feedback(conn, sid, event_id, action):
+    """Cria um convite apenas após evento terminal e consentimento separado."""
+    # Anula convites anteriores se o pedido for reaberto/corrigido.
+    conn.execute('''UPDATE notificacao_avaliacoes
+        SET cancelado_em=clock_timestamp()
+        WHERE solicitacao=%s AND evento<>%s
+          AND nota IS NULL AND cancelado_em IS NULL''', (sid, event_id))
+    if os.getenv('EVOLUTION_FEEDBACK_ENABLED') != '1':
+        return
+    if action not in ('aprovar', 'reprovar', 'portaria'):
+        return
+    code = secrets.token_hex(8).upper()
+    conn.execute('''INSERT INTO notificacao_avaliacoes
+        (notificacao,solicitacao,assinatura,evento,codigo)
+        SELECT n.id,n.solicitacao,n.assinatura,n.evento,%s
+        FROM notificacoes n JOIN notificacao_assinaturas a ON a.id=n.assinatura
+        JOIN solicitacoes s ON s.id=n.solicitacao
+        WHERE n.solicitacao=%s AND n.evento=%s AND n.template_tipo=%s
+        AND n.provedor='evolution' AND a.avaliacao_consentida AND a.revogado_em IS NULL
+        AND (
+          (%s='reprovar' AND s.status='REPROVADA')
+          OR (%s='aprovar' AND s.tipo='Entrada' AND s.status='APROVADA')
+          OR (%s='portaria' AND s.tipo='Saída' AND s.status='APROVADA' AND s.etapa='saída concluída')
+        )
+        ON CONFLICT (notificacao) DO NOTHING''',
+        (code,sid,event_id,action,action,action,action))
 
 
 def enqueue(conn, sid, event_id, action):
@@ -116,3 +139,4 @@ def enqueue(conn, sid, event_id, action):
     conn.execute('''UPDATE notificacoes SET estado='cancelled',resultado='superseded'
         WHERE solicitacao=%s AND evento<%s AND (estado='pending' OR
         (estado='processing' AND despacho_em IS NULL))''', (sid,event_id))
+    enqueue_feedback(conn, sid, event_id, action)
