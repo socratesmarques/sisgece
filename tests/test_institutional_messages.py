@@ -3,7 +3,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from backend.notifications.outbox import TEMPLATES, message_text, public_link
+from backend.notifications.outbox import TEMPLATES, message_text
 
 
 class InstitutionalMessages(unittest.TestCase):
@@ -15,7 +15,8 @@ class InstitutionalMessages(unittest.TestCase):
                     text = message_text(action)
                     self.assertIn('SISGECE | IFCE Campus Maranguape', text)
                     self.assertIn('mensagem automática', text)
-                    self.assertIn('portal oficial do SISGECE', text)
+                    self.assertNotIn('Para acompanhar o andamento', text)
+                    self.assertNotIn('portal oficial do SISGECE', text)
                     self.assertNotIn('[LINK DO SISGECE]', text)
                     self.assertNotIn('localhost', text)
                     self.assertNotIn('CPF', text)
@@ -23,16 +24,20 @@ class InstitutionalMessages(unittest.TestCase):
                     self.assertNotIn('código de consulta', text)
                     self.assertNotIn('http://', text)
 
-    def test_optional_https_link(self):
-        with patch.dict(os.environ, {'SISGECE_PUBLIC_URL': 'https://portal.exemplo.org/consulta/'}):
+    def test_configured_link_is_not_included_in_notifications(self):
+        with patch.dict(os.environ, {'SISGECE_PUBLIC_URL': 'https://portal.exemplo.org/consulta'}):
             for action in TEMPLATES:
-                self.assertIn('https://portal.exemplo.org/consulta', message_text(action))
-        for invalid in ('http://site.exemplo.org', 'http://localhost:8004',
-                        'https://localhost:8004', 'https://user:secret@exemplo.org',
-                        'https://portal.exemplo.org/?token=123'):
-            with patch.dict(os.environ, {'SISGECE_PUBLIC_URL': invalid}):
-                self.assertEqual(public_link(), '')
-                self.assertNotIn(invalid, message_text('cadastro'))
+                text = message_text(action)
+                self.assertNotIn('portal.exemplo.org', text)
+                self.assertNotIn('Para acompanhar o andamento', text)
+
+    def test_optional_feedback_prompt_only_for_terminal_notice(self):
+        data = {'avaliacao_codigo': '1234567890ABCDEF'}
+        for action in ('reprovar', 'aprovar', 'portaria'):
+            self.assertIn('AVALIAR 1234567890ABCDEF 5', message_text(action, data))
+        for action in ('cadastro','recepção','corrigir recepção'):
+            self.assertNotIn('AVALIAR', message_text(action, data))
+        self.assertNotIn('AVALIAR', message_text('reprovar', {'avaliacao_codigo': 'invalid'}))
 
     def test_approval_details_only_when_typed_and_authorized(self):
         from datetime import date, time
