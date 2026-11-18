@@ -591,4 +591,4 @@ register_notifications(app, db, query, value, limit, staff)
 
 register_webhook(app, db)
 
-register_evolution_feedback(app, db)
+register_evolution_feedback(app, db, staff)
