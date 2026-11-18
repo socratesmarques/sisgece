@@ -17,7 +17,6 @@ CONFIG = {
     'EVOLUTION_API_URL': 'http://evolution:8080',
     'EVOLUTION_INSTANCE': 'sisgece-teste',
     'EVOLUTION_API_KEY': 'test-only',
-    'EVOLUTION_ALLOWED_RECIPIENTS': '+5585987654321',
 }
 
 
@@ -32,18 +31,25 @@ class EvolutionTransport(unittest.TestCase):
         self.addCleanup(self.transport.stop)
         self.row = {'id': 1, 'telefone': '+5585987654321', 'template_tipo': 'cadastro'}
 
-    def test_guard_requires_both_flags_and_allowlist(self):
+    def test_guard_requires_flags_but_no_recipient_allowlist(self):
         for change in ({'WHATSAPP_REAL_SEND_ENABLED': '0'},
                        {'EVOLUTION_LAB_ENABLED': '0'},
-                       {'EVOLUTION_ALLOWED_RECIPIENTS': ''},
                        {'EVOLUTION_API_URL': 'https://example.com'},
                        {'EVOLUTION_API_URL': 'http://user:pass@evolution:8080'},
                        {'EVOLUTION_API_URL': 'http://evolution:8080/other'}):
             with patch.dict(os.environ, change):
                 with self.assertRaises(ValueError):
                     EvolutionProvider()
-        self.assertEqual(EvolutionProvider().send(dict(self.row, telefone='+5585999999999')).code,
-                         'recipient_not_allowlisted')
+        # Um novo telefone válido não pode ser bloqueado por uma lista de teste.
+        with patch.dict(os.environ, {'EVOLUTION_ALLOWED_RECIPIENTS': '+5511999999999'}):
+            self.http.side_effect = None
+            self.http.return_value = b'{"key":{"id":"accepted-another"}}'
+            result = EvolutionProvider().send(dict(self.row, telefone='+5585999999999'))
+            self.assertEqual(result.state, 'sent')
+            payload = json.loads(self.http.call_args.args[0].data)
+            self.assertEqual(payload['number'], '5585999999999')
+        self.http.reset_mock()
+        self.http.side_effect = AssertionError('Network forbidden')
         self.assertEqual(EvolutionProvider().send(dict(self.row, template_tipo='unknown')).state, 'failed')
         self.http.assert_not_called()
 
