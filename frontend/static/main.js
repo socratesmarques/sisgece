@@ -222,6 +222,11 @@ if ($("pedido")) {
     await list();
     $("areas").hidden = false;
     $("ver-equipe").hidden = user.perfil !== "superusuário";
+    if (user.perfil === "coordenação" || user.perfil === "superusuário") {
+      $("avaliacoes-painel").hidden = false;
+      $("atualizar-avaliacoes").onclick = () => run(loadRatings);
+      await loadRatings();
+    }
   });
 }
 async function list(page = 1) {
@@ -497,5 +502,26 @@ async function notificationStatus(code) {
   } catch (_) {
     if (version !== notificationRequest) return;
     node(el, "p", "Não foi possível consultar o estado das notificações. Guarde seu código para atendimento.");
+  }
+}
+
+
+async function loadRatings() {
+  const target = $("avaliacoes-resumo");
+  if (!target) return;
+  target.replaceChildren();
+  try {
+    const stats = await api("notificacoes/avaliacoes/estatisticas");
+    node(target, "p", stats.quantidade
+      ? "Total de avaliações: " + stats.quantidade + " · Média: " + stats.media + " de 5"
+      : "Ainda não há avaliações registradas.");
+    if (stats.quantidade) {
+      const scores = Object.entries(stats.distribuicao)
+        .map(([score, count]) => score + " estrela(s): " + count)
+        .join(" · ");
+      node(target, "small", scores);
+    }
+  } catch (_) {
+    node(target, "p", "Não foi possível carregar as avaliações.");
   }
 }
