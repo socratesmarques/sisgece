@@ -1,7 +1,8 @@
 import hashlib
+import os
 import secrets
 
-from .config import CONSENT_VERSION, provider_name
+from .config import CONSENT_VERSION, provider_name, lab_auto_recipient
 from .phone import normalize_phone
 
 
@@ -14,11 +15,20 @@ def subscribe(conn, sid, body):
     if type(consent) is not bool:
         raise ValueError('Consentimento inválido.')
     feedback = body.get('whatsapp_feedback_consent', False)
-    if type(feedback) is not bool or (feedback and not consent):
+    if type(feedback) is not bool:
+        raise ValueError('Autorização de avaliação inválida.')
+
+    # Apenas dados fictícios e números autorizados: a solicitação inicia o
+    # fluxo de teste sem checkboxes. Não tratar como consentimento institucional.
+    automatic = (not consent and lab_auto_recipient(body.get('telefone', '')))
+    if automatic:
+        consent = True
+        feedback = os.getenv('EVOLUTION_FEEDBACK_ENABLED') == '1'
+    elif feedback and not consent:
         raise ValueError('Autorização de avaliação inválida.')
     if not consent:
         return
-    if body.get('whatsapp_consent_version') != CONSENT_VERSION:
+    if not automatic and body.get('whatsapp_consent_version') != CONSENT_VERSION:
         raise ValueError('Leia e aceite a versão atual da autorização.')
     target = body.get('whatsapp_recipient', 'responsavel')
     if target not in ('solicitante', 'responsavel'):
