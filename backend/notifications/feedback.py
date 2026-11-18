@@ -73,7 +73,7 @@ def consume(conn, payload):
     return row is not None
 
 
-def register(app, db):
+def register(app, db, staff):
     @app.post(PATH)
     def evolution_feedback_webhook():
         if os.getenv('EVOLUTION_FEEDBACK_ENABLED') != '1':
@@ -92,3 +92,18 @@ def register(app, db):
         consume(db(), payload)
         # Não retorna se o telefone/código existe, evita enumeração.
         return {'ok': True}
+
+
+    @app.get('/api/notificacoes/avaliacoes/estatisticas')
+    @staff('coordenação', 'superusuário')
+    def feedback_statistics():
+        rows = db().execute('''SELECT nota, count(*) AS quantidade
+            FROM notificacao_avaliacoes
+            WHERE nota IS NOT NULL
+            GROUP BY nota ORDER BY nota''').fetchall()
+        counts = {str(i): 0 for i in range(1, 6)}
+        for row in rows:
+            counts[str(row['nota'])] = row['quantidade']
+        total = sum(counts.values())
+        average = round(sum(int(score) * count for score, count in counts.items()) / total, 2) if total else None
+        return {'quantidade': total, 'media': average, 'distribuicao': counts}
