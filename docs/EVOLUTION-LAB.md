@@ -85,26 +85,124 @@ Pare o worker Evolution, defina `EVOLUTION_LAB_ENABLED=0` e
 Não altere estados da fila manualmente. A versão anterior permanece funcional
 com `mock` e `meta`.
 
-## Mensagens institucionais (oito eventos)
 
-Os textos aprovados ficam em `backend/notifications/outbox.py`, gerados pela
-função `message_text` e usados pelos provedores `mock` e `evolution`.
-O transporte Meta oficial continua utilizando exclusivamente os templates
-aprovados na Meta; alterar textos locais não atualiza os templates externos.
+## Página inicial e mensagens
 
-Opcionalmente defina `SISGECE_PUBLIC_URL=https://dominio-institucional.exemplo/consulta`
-no ambiente do worker **apenas quando o endereço real for confirmado**.
-Sem configuração, o aviso orienta a consultar o portal oficial, mas não inclui
-nenhum placeholder, link local ou domínio fictício. URL não HTTPS, localhost,
-credenciais embutidas e query strings são ignoradas. Não envie nome, CPF,
-matrícula ou código de consulta por WhatsApp.
+A página pública apresenta a marca vertical do IFCE diretamente do acervo
+oficial e substitui somente o quadro de consulta por código. A API
+`/api/consulta` e o código gerado após o envio continuam disponíveis como
+alternativa de suporte e para compatibilidade; não há mais formulário de
+consulta na página inicial.
 
-Depois de alterar os textos ou a URL, reconstrua a imagem e recrie o worker;
-`docker restart` não recarrega variáveis de `--env-file`. Faça testes apenas
-com solicitações fictícias e números autorizados.
+As oito mensagens dos provedores `mock` e `evolution` deixaram de
+recomendar o portal para acompanhamento. Os textos estão em
+`backend/notifications/outbox.py`. A mensagem de aprovação permanece com
+tipo, data e horário do pedido. Os templates enviados pela Meta seguem sendo
+gerenciados na plataforma Meta e não são alterados por esses textos.
 
-Teste específico sem rede:
+## Pesquisa opcional de satisfação via WhatsApp
+
+**Experimental e desativada por padrão.** O formulário oferece uma
+autorização específica para receber um convite de avaliação. Marcar
+autorização de avisos NÃO marca automaticamente o convite de avaliação.
+Consentimentos de solicitações antigas não são convertidos.
+
+No encerramento do pedido — **saída registrada na portaria, aprovação
+de entrada ou solicitação recusada** — a notificação final pelo provedor
+`evolution` pode convidar a pessoa a atribuir nota de 1 a 5.
+
+O convite é acrescentado **à mensagem de encerramento**, não gera
+envio extra em massa e é único por evento. O destinatário responde:
+
+```text
+AVALIAR CODIGO_DA_MENSAGEM 5
+```
+
+Substitua o último dígito pela nota escolhida. O código é gerado no
+banco para a solicitação e vence em sete dias. Cada convite aceita
+somente a primeira avaliação válida do mesmo telefone autorizado.
+Não são armazenados nome, mensagem livre ou telefone na tabela de notas.
+Convites são invalidados quando a solicitação é reaberta/corrigida ou
+a autorização de WhatsApp é revogada.
+
+### Preparar app e worker separados
+
+Depois de recriar a imagem e aplicar a migração `db/009.sql`, configure
+apenas em arquivos de ambiente com permissão 600.
+
+No app web `app.evolution.env.local`:
+
+```ini
+EVOLUTION_FEEDBACK_ENABLED=1
+EVOLUTION_FEEDBACK_WEBHOOK_TOKEN=COLOQUE_UMA_CHAVE_ALEATORIA_DE_32_OU_MAIS_CARACTERES
+```
+
+No worker `worker.evolution.env.local`:
+
+```ini
+EVOLUTION_FEEDBACK_ENABLED=1
+```
+
+Não é necessário expor a chave de envio da Evolution no app web.
+O worker não precisa conhecer a chave do webhook. O token é próprio
+e independente da API key administrativa da Evolution.
+
+### Habilitar webhook na Evolution API v2.3.7
+
+O endpoint de configuração da versão utilizada aceita um objeto
+`webhook` com `headers`. A Evolution e o SISGECE precisam estar
+na mesma rede privada `sisgece-net`. Configure **apenas a instância
+de testes**:
+
+```json
+{
+  "webhook": {
+    "enabled": true,
+    "url": "http://sisgece-app:3000/api/notificacoes/evolution/avaliacao",
+    "headers": {
+      "X-SISGECE-Evolution-Secret": "MESMO_TOKEN_CONFIGURADO_NO_APP"
+    },
+    "byEvents": false,
+    "base64": false,
+    "events": ["MESSAGES_UPSERT"]
+  }
+}
+```
+
+Envie a configuração usando `POST /webhook/set/sisgece-teste` com
+`apikey` no header e o objeto acima no corpo JSON. **Não registre
+o segredo em Git, histórico de shell, capturas de tela ou logs**.
+Valide o header recebido na versão exata do contêiner antes de
+habilitar a pesquisa; caso o header não chegue, o webhook retornará
+403 por segurança. Não ative endpoints públicos nem túneis para
+esse webhook — comunicação exclusivamente pela rede Docker local.
+
+A API receptora usa `messages.upsert`, ignora mensagens próprias,
+grupos, mídia e mensagens fora do comando de nota, verifica o número
+E.164, o código do convite, o consentimento e o encerramento atual
+da solicitação. O comando não gera resposta automática; o resultado
+fica na área da coordenação.
+
+### Visualizar as avaliações
+
+Funcionários de **coordenação** e **superusuário** veem o resumo
+no painel SISGECE: número de avaliações, média de 1 a 5 e
+distribuição por nota. Outros perfis não podem acessar a API
+`GET /api/notificacoes/avaliacoes/estatisticas`. Não são mostrados
+nomes, telefones ou textos livres.
+
+### Testes locais
 
 ```sh
-python -m unittest discover -s tests -p 'test_institutional_messages.py' -v
+python -m unittest discover -s tests -v
 ```
+
+A integração de avaliação usa a fila e o banco PostgreSQL existente,
+mas depende de configuração manual do webhook na instância da Evolution.
+A CI não envia mensagens reais e não comprova recebimento no
+WhatsApp; é necessário um teste separado com dois números consentidos
+(uma conta emissora e outra receptora).
+
+Para desativar imediatamente, pare o worker de testes, altere
+`EVOLUTION_FEEDBACK_ENABLED=0` no app/worker, recrie os
+contêineres e desabilite o webhook na instância da Evolution.
