@@ -13,6 +13,9 @@ def subscribe(conn, sid, body):
     consent = body.get('whatsapp_consent', False)
     if type(consent) is not bool:
         raise ValueError('Consentimento inválido.')
+    feedback = body.get('whatsapp_feedback_consent', False)
+    if type(feedback) is not bool or (feedback and not consent):
+        raise ValueError('Autorização de avaliação inválida.')
     if not consent:
         return
     if body.get('whatsapp_consent_version') != CONSENT_VERSION:
@@ -21,8 +24,8 @@ def subscribe(conn, sid, body):
     if target not in ('solicitante', 'responsavel'):
         raise ValueError('Escolha quem receberá as notificações.')
     conn.execute('''INSERT INTO notificacao_assinaturas
-        (solicitacao,destinatario,provedor,consentimento_versao) VALUES (%s,%s,%s,%s)''',
-        (sid, target, provider_name(), CONSENT_VERSION))
+        (solicitacao,destinatario,provedor,consentimento_versao,avaliacao_consentida) VALUES (%s,%s,%s,%s,%s)''',
+        (sid, target, provider_name(), CONSENT_VERSION, feedback))
 
 
 def challenge(conn, sid):
@@ -61,4 +64,6 @@ def revoke(conn, sid):
         conn.execute('''UPDATE notificacoes SET estado='cancelled',resultado='consent_revoked'
             WHERE assinatura=%s AND (estado='pending' OR
             (estado='processing' AND despacho_em IS NULL))''', (row['id'],))
+        conn.execute('''UPDATE notificacao_avaliacoes SET cancelado_em=clock_timestamp()
+            WHERE assinatura=%s AND nota IS NULL AND cancelado_em IS NULL''',(row['id'],))
     return bool(row)
