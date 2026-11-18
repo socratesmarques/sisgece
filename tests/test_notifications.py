@@ -97,56 +97,44 @@ class Notifications(unittest.TestCase):
             conn.execute("UPDATE notificacao_assinaturas SET desafio_expira=now()-interval '1 second'")
             self.assertFalse(confirm(conn,token,'5585987654321','mock'))
 
-    def test_lab_auto_flow_only_allowed_numbers_and_local_mode(self):
-        # Sem checkboxes ou campos implícitos no payload.
+    def test_evolution_auto_notifies_all_valid_phone_numbers(self):
+        from backend.notifications.config import AUTO_CONTACT_VERSION
+        from backend.notifications.worker import claim, prepare
+        # A automatização não depende de LOCAL_HTTP, allowlist ou flags de laboratório.
         with patch.dict(os.environ, {
             'NOTIFICATIONS_PROVIDER': 'evolution',
-            'LOCAL_HTTP': '1',
-            'EVOLUTION_LAB_ENABLED': '1',
-            'EVOLUTION_LAB_AUTO_FLOW': '1',
-            'EVOLUTION_ALLOWED_RECIPIENTS': '+5585987654321',
+            'LOCAL_HTTP': '0',
+            'EVOLUTION_LAB_ENABLED': '0',
+            'EVOLUTION_LAB_AUTO_FLOW': '0',
+            'EVOLUTION_ALLOWED_RECIPIENTS': '+5511999999999',
             'EVOLUTION_FEEDBACK_ENABLED': '1',
         }):
-            response = self.submit(whatsapp_consent=False,
-                                   whatsapp_feedback_consent=False)
-            self.assertEqual(response.status_code, 201)
-            sid = self.latest()
+            for phone in ('85987654321', '85988887777'):
+                receipt = self.submit(telefone=phone, whatsapp_consent=False,
+                                      whatsapp_feedback_consent=False)
+                self.assertEqual(receipt.status_code, 201)
+                sid = self.latest()
+                with self.conn() as conn:
+                    consent = conn.execute("""SELECT a.provedor,a.consentimento_versao,a.avaliacao_consentida,
+                        n.telefone,n.estado FROM notificacao_assinaturas a
+                        JOIN notificacoes n ON n.assinatura=a.id
+                        WHERE a.solicitacao=%s""", (sid,)).fetchone()
+                    self.assertEqual(consent['provedor'], 'evolution')
+                    self.assertEqual(consent['consentimento_versao'], AUTO_CONTACT_VERSION)
+                    self.assertTrue(consent['avaliacao_consentida'])
+                    self.assertEqual(consent['estado'], 'pending')
+                    self.assertTrue(consent['telefone'].startswith('+55'))
+                self.assertEqual(self.post('notificacoes/estado', receipt.json).json['estado'], 'ativa')
+            # Limpa fila criada neste teste; nenhum envio externo.
             with self.conn() as conn:
-                consent = conn.execute("""SELECT provedor,avaliacao_consentida,revogado_em
-                    FROM notificacao_assinaturas WHERE solicitacao=%s""", (sid,)).fetchone()
-                self.assertEqual(consent['provedor'], 'evolution')
-                from backend.notifications.config import LAB_AUTO_VERSION
-                version = conn.execute("SELECT consentimento_versao FROM notificacao_assinaturas WHERE solicitacao=%s", (sid,)).fetchone()
-                self.assertEqual(version['consentimento_versao'], LAB_AUTO_VERSION)
-                self.assertTrue(consent['avaliacao_consentida'])
-                self.assertIsNone(consent['revogado_em'])
-                notification = conn.execute('SELECT provedor FROM notificacoes WHERE solicitacao=%s',
-                                            (sid,)).fetchone()
-                self.assertEqual(notification['provedor'], 'evolution')
-            denied = self.submit(telefone='85988887777',
-                                 whatsapp_consent=False,
-                                 whatsapp_feedback_consent=False)
-            self.assertEqual(denied.status_code, 201)
-            self.assertEqual(self.post('notificacoes/estado', denied.json).json['estado'],
-                             'sem autorização')
+                conn.execute("DELETE FROM notificacoes WHERE provedor='evolution'")
+                conn.execute("TRUNCATE notificacao_ritmo")
 
-            with patch.dict(os.environ, {'LOCAL_HTTP': '0'}):
-                denied = self.submit(whatsapp_consent=False, whatsapp_feedback_consent=False)
-                self.assertEqual(self.post('notificacoes/estado', denied.json).json['estado'],
-                                 'sem autorização')
-            with patch.dict(os.environ, {'EVOLUTION_LAB_AUTO_FLOW': '0'}):
-                denied = self.submit(whatsapp_consent=False, whatsapp_feedback_consent=False)
-                self.assertEqual(self.post('notificacoes/estado', denied.json).json['estado'],
-                                 'sem autorização')
-
-    def test_lab_auto_mode_without_feedback_flag(self):
+    def test_evolution_auto_feedback_requires_feature_flag(self):
         with patch.dict(os.environ, {
             'NOTIFICATIONS_PROVIDER': 'evolution',
-            'LOCAL_HTTP': '1',
-            'EVOLUTION_LAB_ENABLED': '1',
-            'EVOLUTION_LAB_AUTO_FLOW': '1',
-            'EVOLUTION_ALLOWED_RECIPIENTS': '+5585987654321',
             'EVOLUTION_FEEDBACK_ENABLED': '0',
+            'EVOLUTION_ALLOWED_RECIPIENTS': '',
         }):
             receipt = self.submit(whatsapp_consent=False)
             self.assertEqual(receipt.status_code, 201)
