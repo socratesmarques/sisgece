@@ -11,6 +11,16 @@ from backend.notifications.worker import process_one
 
 assert os.getenv('NOTIFICATIONS_PROVIDER','mock')=='mock'
 url = os.getenv('TEST_URL','http://127.0.0.1:8004')
+
+def consult_via_api(page, code):
+    response = page.request.post(
+        url + '/api/consulta',
+        headers={'X-SISGECE': '1'},
+        data={'codigo': code},
+    )
+    assert response.status == 200, response.text()
+    return response.json()
+
 with sync_playwright() as pw:
     browser = pw.chromium.launch(executable_path=os.getenv('BROWSER_EXECUTABLE') or None)
     for width in (390,1280):
@@ -34,9 +44,9 @@ with sync_playwright() as pw:
         form.locator('[name=whatsapp_consent]').check()
         form.get_by_role('button',name='Enviar solicitação').click()
         expect(page.locator('#recibo')).to_contain_text('Solicitação salva')
-        # A consulta principal funciona enquanto a consulta auxiliar está bloqueada.
-        page.get_by_role('button',name='Consultar solicitação').click()
-        expect(page.locator('#resultado')).to_contain_text('PENDENTE')
+        # A interface de consulta foi retirada, mas a API permanece disponível.
+        code = page.locator('#recibo').inner_text().splitlines()[-1].split(': ')[1]
+        assert consult_via_api(page, code)['status'] == 'PENDENTE'
         page.evaluate('window.resumeNotificationStatus()')
         status = page.locator('#whatsapp-status')
         expect(status).to_contain_text('ativa')
@@ -50,8 +60,7 @@ with sync_playwright() as pw:
         assert len(provider.messages)==1
         status.get_by_role('button',name='Revogar notificações').click()
         expect(status).to_contain_text('revogada')
-        page.get_by_role('button',name='Consultar solicitação').click()
-        expect(page.locator('#resultado')).to_contain_text('PENDENTE')
+        assert consult_via_api(page, code)['status'] == 'PENDENTE'
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         page.close()
     browser.close()
