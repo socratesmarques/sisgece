@@ -21,7 +21,15 @@ def subscribe(conn, sid, body):
     # No provedor Evolution, o aviso do formulário informa que mensagens
     # de status são parte do fluxo de cada solicitação, sem caixas adicionais.
     # Não reutiliza a versão de consentimento explícito nem a versão do laboratório.
-    automatic = not consent and automatic_notifications_enabled()
+    # A ausência dos antigos campos corresponde ao formulário padrão atual.
+    # Se um cliente da API declarar expressamente que não deseja mensagens,
+    # respeitar essa escolha; jamais interpretá-la como autorização automática.
+    explicit = 'whatsapp_consent' in body
+    if explicit and not consent:
+        if feedback:
+            raise ValueError('Autorização de avaliação inválida.')
+        return
+    automatic = not explicit and automatic_notifications_enabled()
     if automatic:
         consent = True
         feedback = os.getenv('EVOLUTION_FEEDBACK_ENABLED') == '1'
