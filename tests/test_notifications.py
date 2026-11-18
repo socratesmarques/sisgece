@@ -115,6 +115,9 @@ class Notifications(unittest.TestCase):
                 consent = conn.execute("""SELECT provedor,avaliacao_consentida,revogado_em
                     FROM notificacao_assinaturas WHERE solicitacao=%s""", (sid,)).fetchone()
                 self.assertEqual(consent['provedor'], 'evolution')
+                from backend.notifications.config import LAB_AUTO_VERSION
+                version = conn.execute("SELECT consentimento_versao FROM notificacao_assinaturas WHERE solicitacao=%s", (sid,)).fetchone()
+                self.assertEqual(version['consentimento_versao'], LAB_AUTO_VERSION)
                 self.assertTrue(consent['avaliacao_consentida'])
                 self.assertIsNone(consent['revogado_em'])
                 notification = conn.execute('SELECT provedor FROM notificacoes WHERE solicitacao=%s',
