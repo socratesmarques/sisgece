@@ -358,8 +358,13 @@ def requests_list():
         WHERE (protocolo ILIKE %s OR declarado->>'aluno' ILIKE %s OR declarado->>'matricula' ILIKE %s)
         AND (%s='' OR status=%s) AND (%s='' OR data_solicitada::text=%s)
         AND (%s='' OR tipo=%s)
-        AND (%s OR (status='APROVADA' AND lower(tipo) IN ('saida','saída'))) ORDER BY id DESC""",
-        (term, term, term, status, status, day, day, movement, movement, not restricted()),
+        AND (%s OR (status='APROVADA' AND (
+          lower(tipo) IN ('saida','saída')
+          OR (%s='recepção' AND lower(tipo)='entrada'
+              AND etapa IN ('aguardando recepção','entrada concluída'))
+        ))) ORDER BY id DESC""",
+        (term, term, term, status, status, day, day, movement, movement,
+         not restricted(), g.user["perfil"]),
     )
 
 
@@ -374,14 +379,16 @@ def details(sid):
         """SELECT protocolo,declarado,justificativa,data_solicitada::text,horario_solicitado::text,tipo,status,etapa,mensagem FROM solicitacoes WHERE id=%s""",
         (sid,),
     ).fetchone()
-    if (
-        not row
-        or restricted()
-        and (
-            row["status"] != "APROVADA" or row["tipo"].lower() not in ("saida", "saída")
-        )
-    ):
+    if not row:
         abort(404)
+    if restricted():
+        exit_visible = row["tipo"].lower() in ("saida", "saída")
+        entry_visible = (
+            g.user["perfil"] == "recepção" and row["tipo"].lower() == "entrada"
+            and row["etapa"] in ("aguardando recepção", "entrada concluída")
+        )
+        if row["status"] != "APROVADA" or not (exit_visible or entry_visible):
+            abort(404)
     if restricted():
         row["declarado"] = {k: row["declarado"].get(k) for k in ("aluno", "matricula")}
         del row["justificativa"], row["mensagem"]
@@ -393,10 +400,14 @@ def details(sid):
     for item in events["itens"]:
         item["quando"] = instant(item["quando"])
     checks = {}
-    for step, valid in (
-        ("recepção", row["etapa"] != "aguardando"),
-        ("portaria", row["etapa"] == "saída concluída"),
-    ):
+    if row["tipo"].lower() == "entrada":
+        steps = (("recepção", row["etapa"] == "entrada concluída"),)
+    else:
+        steps = (
+            ("recepção", row["etapa"] in ("recepção confirmada", "saída concluída")),
+            ("portaria", row["etapa"] == "saída concluída"),
+        )
+    for step, valid in steps:
         entry = None
         if valid:
             entry = query(
@@ -428,17 +439,20 @@ def act(sid):
     is_exit = row["tipo"].lower() in ("saida", "saída")
     if not is_exit and row["tipo"].lower() != "entrada":
         abort(409, "Movimentação histórica disponível apenas para consulta.")
-    if not is_exit and action in (
-        "recepção", "portaria", "corrigir recepção", "corrigir portaria"
-    ):
-        abort(409, "Esta ação é exclusiva para solicitações de saída.")
+    if not is_exit and action in ("portaria", "corrigir portaria"):
+        abort(409, "A portaria não participa das solicitações de entrada.")
     status, stage = row["status"], row["etapa"]
     note = value("nota", 2000, False)
     if action in ("aprovar", "reprovar") and status in ("PENDENTE", "RECEBIDA"):
         msg = value("mensagem", 2000, action == "reprovar")
         query(
-            """UPDATE solicitacoes SET status=%s,administrador_id=%s,analisado_em=clock_timestamp(),mensagem=%s,observacao_coordenacao=%s WHERE id=%s""",
+            """UPDATE solicitacoes SET status=%s,
+                etapa=CASE WHEN tipo='Entrada' AND %s='APROVADA'
+                    THEN 'aguardando recepção' ELSE etapa END,
+                administrador_id=%s,analisado_em=clock_timestamp(),
+                mensagem=%s,observacao_coordenacao=%s WHERE id=%s""",
             (
+                "APROVADA" if action == "aprovar" else "REPROVADA",
                 "APROVADA" if action == "aprovar" else "REPROVADA",
                 g.user["id"],
                 msg,
@@ -450,12 +464,18 @@ def act(sid):
     elif (
         action in ("recepção", "portaria")
         and status == "APROVADA"
-        and stage
-        == {"recepção": "aguardando", "portaria": "recepção confirmada"}[action]
+        and stage == (
+            {"recepção": "aguardando", "portaria": "recepção confirmada"}[action]
+            if is_exit else "aguardando recepção"
+        )
     ):
+        next_stage = (
+            ("recepção confirmada" if is_exit else "entrada concluída")
+            if action == "recepção" else "saída concluída"
+        )
         query(
             "UPDATE solicitacoes SET etapa=%s WHERE id=%s",
-            ("recepção confirmada" if action == "recepção" else "saída concluída", sid),
+            (next_stage, sid),
         )
     elif (
         action in ("corrigir recepção", "corrigir portaria", "reabrir análise")
@@ -466,7 +486,7 @@ def act(sid):
             action == "corrigir portaria"
             and stage != "saída concluída"
             or action == "corrigir recepção"
-            and stage == "aguardando"
+            and (stage == "aguardando" if is_exit else stage != "entrada concluída")
         ):
             abort(409)
         query(
@@ -474,7 +494,9 @@ def act(sid):
             (
                 "recepção confirmada"
                 if action == "corrigir portaria"
-                else "aguardando" if is_exit else None,
+                else ("aguardando" if is_exit else None)
+                    if action == "reabrir análise"
+                else ("aguardando" if is_exit else "aguardando recepção"),
                 sid,
             ),
         )
@@ -507,9 +529,13 @@ def request_history():
         e.acao,e.quando,a.nome AS autor FROM eventos e
         JOIN solicitacoes s ON s.id=e.solicitacao
         LEFT JOIN administradores a ON a.id=e.autor
-        WHERE (%s OR (s.status='APROVADA' AND lower(s.tipo) IN ('saida','saída')))
+        WHERE (%s OR (s.status='APROVADA' AND (
+            lower(s.tipo) IN ('saida','saída')
+            OR (%s='recepção' AND lower(s.tipo)='entrada'
+                AND s.etapa IN ('aguardando recepção','entrada concluída'))
+        )))
         AND (s.protocolo ILIKE %s OR s.declarado->>'aluno' ILIKE %s OR s.declarado->>'matricula' ILIKE %s)
-        ORDER BY e.id DESC""", (not restricted(),term,term,term))
+        ORDER BY e.id DESC""", (not restricted(),g.user["perfil"],term,term,term))
     for row in rows["itens"]:
         row["quando"] = instant(row["quando"])
     return rows

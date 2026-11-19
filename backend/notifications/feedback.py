@@ -65,7 +65,8 @@ def consume(conn, payload):
         AND s.declarado->>'telefone'=%s
         AND (
             (n.template_tipo='reprovar' AND s.status='REPROVADA')
-            OR (n.template_tipo='aprovar' AND s.tipo='Entrada' AND s.status='APROVADA')
+            OR (n.template_tipo='recepção' AND s.tipo='Entrada' AND s.status='APROVADA'
+                AND s.etapa='entrada concluída')
             OR (n.template_tipo='portaria' AND s.tipo='Saída' AND s.status='APROVADA'
                 AND s.etapa='saída concluída')
         )

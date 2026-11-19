@@ -33,11 +33,23 @@ class InstitutionalMessages(unittest.TestCase):
 
     def test_optional_feedback_prompt_only_for_terminal_notice(self):
         data = {'avaliacao_codigo': '1234567890ABCDEF'}
-        for action in ('reprovar', 'aprovar', 'portaria'):
+        for action in ('reprovar', 'portaria'):
             self.assertIn('AVALIAR 1234567890ABCDEF 5', message_text(action, data))
-        for action in ('cadastro','recepção','corrigir recepção'):
+        self.assertIn('AVALIAR 1234567890ABCDEF 5',
+                      message_text('recepção', {**data, 'solicitacao_tipo': 'Entrada'}))
+        self.assertNotIn('AVALIAR',
+                         message_text('recepção', {**data, 'solicitacao_tipo': 'Saída'}))
+        for action in ('cadastro', 'aprovar', 'corrigir recepção'):
             self.assertNotIn('AVALIAR', message_text(action, data))
         self.assertNotIn('AVALIAR', message_text('reprovar', {'avaliacao_codigo': 'invalid'}))
+
+    def test_reception_message_distinguishes_entry_from_exit(self):
+        entrada = message_text('recepção', {'solicitacao_tipo': 'Entrada'})
+        saida = message_text('recepção', {'solicitacao_tipo': 'Saída'})
+        self.assertIn('entrada foi concluída na recepção', entrada)
+        self.assertIn('Não há etapa de portaria', entrada)
+        self.assertIn('liberação pela portaria', saida)
+        self.assertNotIn('entrada foi concluída', saida)
 
     def test_approval_details_only_when_typed_and_authorized(self):
         from datetime import date, time

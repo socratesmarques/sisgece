@@ -16,16 +16,15 @@ TEMPLATES = {
         'A solicitação encontra-se *pendente de análise pela coordenação*.'),
     'aprovar': ('sisgece_aprovacao',
         'Informamos que sua solicitação foi *aprovada pela coordenação*.\n\n'
-        'A aprovação administrativa foi registrada no sistema. Caso se trate de uma '
-        'solicitação de saída, ainda deverão ser cumpridas as etapas de conferência '
-        'estabelecidas pela instituição.'),
+        'A aprovação administrativa foi registrada no sistema. Para entradas, ainda é '
+        'necessária a confirmação pela recepção. Para saídas, permanecem as etapas '
+        'de conferência estabelecidas pela instituição.'),
     'reprovar': ('sisgece_atualizacao',
         'Informamos que, após análise da coordenação, sua solicitação *não foi aprovada*.\n\n'
         'Em caso de dúvidas sobre a decisão registrada, procure a coordenação do campus.'),
     'recepção': ('sisgece_etapa',
         'Informamos que a etapa de *conferência pela recepção* referente à sua solicitação '
-        'de saída foi concluída.\n\n'
-        'A solicitação seguirá os procedimentos institucionais previstos para a liberação de saída.'),
+        'foi concluída.'),
     'portaria': ('sisgece_etapa',
         'Informamos que a *saída do estudante foi registrada pela portaria* do IFCE '
         'Campus Maranguape.\n\n'
@@ -35,7 +34,7 @@ TEMPLATES = {
         'A decisão anterior deverá ser reavaliada e o andamento poderá sofrer alterações.'),
     'corrigir recepção': ('sisgece_atualizacao',
         'Informamos que houve uma *atualização no registro de conferência da recepção* '
-        'referente à sua solicitação de saída.\n\n'
+        'referente à sua solicitação.\n\n'
         'O histórico e a situação atualizada estão disponíveis para consulta no sistema.'),
     'corrigir portaria': ('sisgece_atualizacao',
         'Informamos que houve uma *atualização no registro da portaria* referente à sua '
@@ -68,13 +67,22 @@ def approval_details(notification):
 def message_text(action, notification=None):
     """Texto mock/Evolution; não modifica templates Meta aprovados."""
     content = TEMPLATES[action][1]
+    if action == 'recepção':
+        if notification and notification.get('solicitacao_tipo') == 'Entrada':
+            content += ('\n\nA *entrada foi concluída na recepção*. '
+                        'Não há etapa de portaria para solicitações de entrada.')
+        else:
+            content += ('\n\nPara saídas, a solicitação seguirá os procedimentos '
+                        'institucionais previstos para a liberação pela portaria.')
     if action == 'aprovar':
         details = approval_details(notification)
         if details:
             content += '\n\n' + details
     code = notification.get('avaliacao_codigo') if notification else None
     invitation = bool(
-        action in ('aprovar', 'reprovar', 'portaria')
+        (action in ('reprovar', 'portaria')
+         or (action == 'recepção' and notification
+             and notification.get('solicitacao_tipo') == 'Entrada'))
         and isinstance(code, str)
         and re.fullmatch(r'[A-F0-9]{16}', code)
     )
@@ -103,7 +111,7 @@ def enqueue_feedback(conn, sid, event_id, action):
           AND nota IS NULL AND cancelado_em IS NULL''', (sid, event_id))
     if os.getenv('EVOLUTION_FEEDBACK_ENABLED') != '1':
         return
-    if action not in ('aprovar', 'reprovar', 'portaria'):
+    if action not in ('recepção', 'reprovar', 'portaria'):
         return
     code = secrets.token_hex(8).upper()
     conn.execute('''INSERT INTO notificacao_avaliacoes
@@ -115,7 +123,8 @@ def enqueue_feedback(conn, sid, event_id, action):
         AND n.provedor='evolution' AND a.avaliacao_consentida AND a.revogado_em IS NULL
         AND (
           (%s='reprovar' AND s.status='REPROVADA')
-          OR (%s='aprovar' AND s.tipo='Entrada' AND s.status='APROVADA')
+          OR (%s='recepção' AND s.tipo='Entrada' AND s.status='APROVADA'
+              AND s.etapa='entrada concluída')
           OR (%s='portaria' AND s.tipo='Saída' AND s.status='APROVADA' AND s.etapa='saída concluída')
         )
         ON CONFLICT (notificacao) DO NOTHING''',

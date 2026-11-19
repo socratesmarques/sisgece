@@ -279,12 +279,14 @@ async function detail(id, page = 1) {
       node(field, "dd", k === "telefone" ? formatPhone(v) : v);
     }
   }
-  if (r.status === "APROVADA" && ["saida","saída"].includes(r.tipo.toLowerCase())) {
-    node(el, "h3", "Conferência da saída");
+  if (r.status === "APROVADA" &&
+      ["entrada", "saida", "saída"].includes(r.tipo.toLowerCase())) {
+    const entryMovement = r.tipo.toLowerCase() === "entrada";
+    node(el, "h3", entryMovement ? "Conferência da entrada" : "Conferência da saída");
     for (const [step, entry] of Object.entries(r.confirmacoes)) {
       const title =
         step === "recepção"
-          ? "Recepção · conferência"
+          ? entryMovement ? "Recepção · registro de entrada" : "Recepção · conferência"
           : "Portaria · saída efetiva";
       const check = node(el, "div");
       check.className = "check";
@@ -337,25 +339,30 @@ async function detail(id, page = 1) {
         "p",
         isExit
           ? "Reabrir a análise invalida as duas confirmações. Corrigir a recepção também invalida a portaria."
-          : "Reabrir a análise devolve o pedido de entrada para PENDENTE. Informe a justificativa na observação interna.",
+          : "Reabrir a análise invalida a confirmação da entrada na recepção e devolve o pedido para PENDENTE.",
       );
       const actions = ["reabrir análise"];
-      if (isExit && r.etapa !== "aguardando") actions.push("corrigir recepção");
+      if ((isExit && r.etapa !== "aguardando") ||
+          (!isExit && r.etapa === "entrada concluída"))
+        actions.push("corrigir recepção");
       if (isExit && r.etapa === "saída concluída") actions.push("corrigir portaria");
       for (const a of actions)
         button(el, a, () => send(a, { nota: note.value }));
     }
   }
-  if (isExit && r.status === "APROVADA" && (
-    (user.perfil === "recepção" && r.etapa === "aguardando") ||
-    (user.perfil === "portaria" && r.etapa === "recepção confirmada")
+  if (r.status === "APROVADA" && (
+    (user.perfil === "recepção" &&
+      (isExit ? r.etapa === "aguardando" :
+        r.tipo.toLowerCase() === "entrada" && r.etapa === "aguardando recepção")) ||
+    (isExit && user.perfil === "portaria" && r.etapa === "recepção confirmada")
   )) {
     const box = node(
       node(
         el,
         "label",
         user.perfil === "recepção"
-          ? "Conferi a autorização na recepção "
+          ? isExit ? "Conferi a autorização de saída na recepção " :
+            "Confirmo que a entrada foi registrada na recepção "
           : "Confirmo que o aluno deixou o campus ",
       ),
       "input",
@@ -395,7 +402,7 @@ async function detail(id, page = 1) {
 function roleHelp() {
   const descriptions = {
     "coordenação": "Analisa solicitações e decide sobre entradas e saídas.",
-    "recepção": "Confere autorizações de saída aprovadas.",
+    "recepção": "Confere saídas aprovadas e registra a conclusão das entradas aprovadas.",
     "portaria": "Registra a saída após a conferência da recepção.",
     "superusuário": "Gerencia funcionários, permissões e análises."
   };

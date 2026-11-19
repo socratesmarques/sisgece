@@ -97,20 +97,34 @@ class Flow(unittest.TestCase):
                         "acao": action, "mensagem": "Orientação pública", "nota": "Anotação reservada",
                     }).status_code, 200)
                     tracked = self.post(public, "consulta", receipt.json).json
-                    self.assertEqual(tracked, dict(tipo="Entrada", status=expected, etapa=None, mensagem="Orientação pública"))
+                    expected_stage = "aguardando recepção" if action == "aprovar" else None
+                    self.assertEqual(tracked, dict(tipo="Entrada", status=expected, etapa=expected_stage, mensagem="Orientação pública"))
                     self.assertEqual(self.post(client, path, {"acao": action}).status_code, 409)
-                    for other in ("recepção", "portaria"):
-                        self.assertEqual(self.post(clients[other], path, {"acao": other}).status_code, 409)
-                        self.assertEqual(clients[other].get("/api/" + path).status_code, 404)
-                    self.assertEqual(self.post(client, path, {"acao": "corrigir recepção", "nota": "Revisão"}).status_code, 409)
+                    self.assertEqual(self.post(clients["portaria"], path, {"acao": "portaria"}).status_code, 409)
+                    self.assertEqual(clients["portaria"].get("/api/" + path).status_code, 404)
+                    if action == "aprovar":
+                        self.assertEqual(clients["recepção"].get("/api/" + path).status_code, 200)
+                        self.assertEqual(self.post(clients["recepção"], path, {"acao": "recepção"}).status_code, 200)
+                        self.assertEqual(self.post(public, "consulta", receipt.json).json["etapa"], "entrada concluída")
+                        self.assertEqual(self.post(clients["recepção"], path, {"acao": "recepção"}).status_code, 409)
+                        self.assertEqual(self.post(client, path, {
+                            "acao": "corrigir recepção", "nota": "Revisão",
+                        }).status_code, 200)
+                        self.assertEqual(self.post(public, "consulta", receipt.json).json["etapa"], "aguardando recepção")
+                    else:
+                        self.assertEqual(self.post(clients["recepção"], path, {"acao": "recepção"}).status_code, 409)
+                        self.assertEqual(clients["recepção"].get("/api/" + path).status_code, 404)
+                        self.assertEqual(self.post(client, path, {
+                            "acao": "corrigir recepção", "nota": "Revisão",
+                        }).status_code, 409)
                     self.assertEqual(self.post(client, path, {"acao": "reabrir análise"}).status_code, 400)
                     self.assertEqual(self.post(client, path, {"acao": "reabrir análise", "nota": "Revisar dados"}).status_code, 200)
                     reopened = self.post(public, "consulta", receipt.json).json
                     self.assertEqual(reopened, dict(tipo="Entrada", status="PENDENTE", etapa=None, mensagem=None))
                     history = client.get("/api/" + path).json["historico"]["itens"]
-                    self.assertEqual(history[1]["acao"], action)
-                    self.assertEqual(history[1]["autor"], role)
-                    self.assertIn("Anotação reservada", history[1]["nota"])
+                    decision = next(event for event in history if event["acao"] == action)
+                    self.assertEqual(decision["autor"], role)
+                    self.assertIn("Anotação reservada", decision["nota"])
 
     def test_migrate_received_entries(self):
         with psycopg.connect() as db:
@@ -207,7 +221,9 @@ class Flow(unittest.TestCase):
         self.assertEqual(self.post(public,"consulta",entry.json).json,dict(tipo="Entrada",status="PENDENTE",etapa=None,mensagem=None))
         path = "pedidos/"+str(coord.get("/api/pedidos?tipo=Entrada&status=PENDENTE").json["itens"][0]["id"])
         self.assertEqual(act(coord,"aprovar"),200)
-        self.assertEqual(act(desk,"recepção"),409)
+        self.assertEqual(act(desk,"recepção"),200)
+        self.assertEqual(self.post(public,"consulta",entry.json).json["etapa"], "entrada concluída")
+        self.assertEqual(act(gate,"portaria"),409)
         self.assertEqual(gate.get("/api/"+path).status_code,404)
         self.assertEqual(self.post(public,"solicitar",dict(form,tipo="outro")).status_code,400)
         account = dict(
@@ -216,7 +232,8 @@ class Flow(unittest.TestCase):
         self.assertEqual(self.post(admin,"contas",dict(account,senha="1234567")).status_code,400)
         self.assertEqual(public.get("/api/historico").status_code,401)
         self.assertTrue(coord.get("/api/historico").json["itens"])
-        self.assertFalse(any(e["tipo"]=="Entrada" for e in desk.get("/api/historico").json["itens"]))
+        self.assertTrue(any(e["tipo"]=="Entrada" for e in desk.get("/api/historico").json["itens"]))
+        self.assertFalse(any(e["tipo"]=="Entrada" for e in gate.get("/api/historico").json["itens"]))
         self.assertEqual(self.post(coord, "contas", account).status_code, 403)
         self.assertEqual(self.post(admin, "contas", account).status_code, 200)
         accounts = admin.get("/api/contas").json["itens"]
