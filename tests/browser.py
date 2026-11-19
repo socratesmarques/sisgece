@@ -6,6 +6,16 @@ from playwright.sync_api import sync_playwright, expect
 
 url = os.getenv("TEST_URL", "http://127.0.0.1:8004")
 
+def consult_via_api(page, code):
+    response = page.request.post(
+        url + "/api/consulta",
+        headers={"X-SISGECE": "1"},
+        data={"codigo": code},
+    )
+    assert response.status == 200, response.text()
+    return response.json()
+
+
 
 def check_input_formatting(page):
     form = page.locator("#pedido")
@@ -112,9 +122,8 @@ with sync_playwright() as pw:
         expect(form.locator("[name=parentesco]")).to_have_value("")
         expect(page.locator("#familia")).to_be_hidden()
         lines = receipt.inner_text().splitlines()
-        page.locator("#rastrear [name=codigo]").fill(lines[-1].split(": ")[1])
-        page.get_by_role("button", name="Consultar solicitação").click()
-        expect(page.locator("#resultado")).to_contain_text("PENDENTE")
+        assert consult_via_api(page, lines[-1].split(": ")[1])["status"] == "PENDENTE"
+        assert page.locator("#rastrear").count() == 0
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         page.close()
     browser.close()
@@ -210,8 +219,8 @@ with sync_playwright() as pw:
                     form.locator(f"[name={key}]").fill(value)
             form.get_by_role("button", name="Enviar solicitação").click()
             expect(public.locator("#recibo")).to_contain_text("aguarda análise")
-            public.get_by_role("button", name="Consultar solicitação").click()
-            expect(public.locator("#resultado")).to_contain_text("PENDENTE")
+            code = public.locator("#recibo").inner_text().splitlines()[-1].split(": ")[1]
+            assert consult_via_api(public, code)["status"] == "PENDENTE"
             staff.locator("#filtro [name=q]").fill(entry["matricula"])
             staff.evaluate("""() => {
                 const originalFetch = window.fetch.bind(window);
@@ -250,20 +259,41 @@ with sync_playwright() as pw:
             expect(detail).to_contain_text(expected)
             expect(detail.get_by_role("button", name="corrigir recepção")).to_have_count(0)
             expect(detail.get_by_role("button", name="corrigir portaria")).to_have_count(0)
-            public.get_by_role("button", name="Consultar solicitação").click()
-            result = public.locator("#resultado")
-            expect(result).to_contain_text(expected)
-            expect(result).to_contain_text("Orientação pública de teste")
-            expect(result).not_to_contain_text("NOTA INTERNA RESERVADA")
-            expect(result).not_to_contain_text("null")
+            result = consult_via_api(public, code)
+            assert result["status"] == expected
+            assert "Orientação pública de teste" in str(result)
+            assert "NOTA INTERNA RESERVADA" not in str(result)
+            assert "null" not in str(result)
             assert_responsive(public)
             assert_responsive(staff)
+            if action == "aprovar":
+                # Entrada aprovada aparece para a recepção, mas não exige portaria.
+                reception = new_page(viewport={"width": width, "height": 844})
+                reception.goto(url + "/equipe")
+                reception.get_by_label("Usuário", exact=True).fill("1" + suffix)
+                reception.get_by_label("Senha", exact=True).fill(password)
+                reception.get_by_role("button", name="Entrar", exact=True).click()
+                reception.locator("#filtro [name=q]").fill(entry["matricula"])
+                reception.get_by_role("button", name="Buscar solicitações").click()
+                expect(reception.locator("#lista .record")).to_have_count(1)
+                reception.get_by_role("button", name="Abrir detalhes").click()
+                entry_detail = reception.locator("#detalhe")
+                expect(entry_detail).to_contain_text("Conferência da entrada")
+                expect(entry_detail).to_contain_text("Recepção · registro de entrada")
+                expect(entry_detail).not_to_contain_text("Portaria · saída efetiva")
+                entry_detail.locator("input[type=checkbox]").check()
+                entry_detail.get_by_role("button", name="Registrar confirmação").click()
+                expect(entry_detail).to_contain_text("entrada concluída")
+                reception.close()
+                staff.get_by_role("button", name="Buscar solicitações").click()
+                staff.get_by_role("button", name="Abrir detalhes").click()
+                expect(detail).to_contain_text("entrada concluída")
             detail.locator("[name=nota]").fill("Revisar dados de teste")
             detail.get_by_role("button", name="reabrir análise", exact=True).click()
             expect(detail.get_by_role("button", name="aprovar", exact=True)).to_be_visible()
-            public.get_by_role("button", name="Consultar solicitação").click()
-            expect(result).to_contain_text("PENDENTE")
-            expect(result).not_to_contain_text("Orientação pública de teste")
+            result = consult_via_api(public, code)
+            assert result["status"] == "PENDENTE"
+            assert "Orientação pública de teste" not in str(result)
             public.close()
         # O layout anterior tem uma limitação conhecida de largura em 320 px.
         for width in (390, 768, 1024, 1440):
