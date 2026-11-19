@@ -81,7 +81,7 @@ def check_input_formatting(page):
 
 
 with sync_playwright() as pw:
-    browser = pw.chromium.launch(channel=os.getenv("BROWSER_CHANNEL") or None)
+    browser = pw.chromium.launch(channel=os.getenv("BROWSER_CHANNEL") or None, executable_path=os.getenv("BROWSER_EXECUTABLE") or None)
     for width, role in [(1280, "Aluno"), (390, "Responsável")]:
         page = browser.new_page(viewport={"width": width, "height": 844})
         page.goto(url)
@@ -143,7 +143,7 @@ with psycopg.connect() as db:
         )
 
 with sync_playwright() as pw:
-    browser = pw.chromium.launch(channel=os.getenv("BROWSER_CHANNEL") or None)
+    browser = pw.chromium.launch(channel=os.getenv("BROWSER_CHANNEL") or None, executable_path=os.getenv("BROWSER_EXECUTABLE") or None)
     for width, role in zip((1280, 390, 390), roles):
         page = browser.new_page(viewport={"width": width, "height": 844})
         page.goto(url + "/equipe")
@@ -184,7 +184,7 @@ def assert_responsive(page):
 
 
 with sync_playwright() as pw:
-    browser = pw.chromium.launch(channel=os.getenv("BROWSER_CHANNEL") or None)
+    browser = pw.chromium.launch(channel=os.getenv("BROWSER_CHANNEL") or None, executable_path=os.getenv("BROWSER_EXECUTABLE") or None)
     errors = []
     def new_page(**options):
         page = browser.new_page(**options)
@@ -213,10 +213,31 @@ with sync_playwright() as pw:
             public.get_by_role("button", name="Consultar solicitação").click()
             expect(public.locator("#resultado")).to_contain_text("PENDENTE")
             staff.locator("#filtro [name=q]").fill(entry["matricula"])
+            staff.evaluate("""() => {
+                const originalFetch = window.fetch.bind(window);
+                const gate = new Promise(resolve => { window.releaseList = resolve; });
+                window.fetch = async (...args) => {
+                    if (String(args[0]).startsWith('/api/pedidos?')) await gate;
+                    return originalFetch(...args);
+                };
+            }""")
             staff.get_by_role("button", name="Buscar solicitações").click()
+            expect(staff.locator("#lista .record")).to_have_count(0)
+            staff.evaluate('window.releaseList()')
             expect(staff.locator("#lista .record")).to_have_count(1)
+            # Não exibir ações de outro pedido enquanto os detalhes novos carregam.
+            staff.evaluate("""() => {
+                const originalFetch = window.fetch.bind(window);
+                const gate = new Promise(resolve => { window.releaseDetails = resolve; });
+                window.fetch = async (...args) => {
+                    if (String(args[0]).startsWith('/api/pedidos/') && !args[1]?.method) await gate;
+                    return originalFetch(...args);
+                };
+            }""")
             staff.get_by_role("button", name="Abrir detalhes").click()
             detail = staff.locator("#detalhe")
+            expect(detail).to_be_hidden()
+            staff.evaluate('window.releaseDetails()')
             expect(detail.get_by_role("button", name="aprovar", exact=True)).to_be_visible()
             if expected == "REPROVADA":
                 detail.get_by_role("button", name=action, exact=True).click()

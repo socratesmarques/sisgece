@@ -6,6 +6,8 @@ RUN pip install --no-cache-dir -r requirements.txt && useradd --system sisgece
 COPY backend backend
 COPY frontend frontend
 COPY db db
+# Preserve a non-root runtime even when the build checkout has restrictive modes.
+RUN chmod -R a+rX backend frontend db
 USER sisgece
 EXPOSE 3000
 HEALTHCHECK CMD python -c "from urllib.request import urlopen; urlopen('http://127.0.0.1:3000/api/ready',timeout=3)"

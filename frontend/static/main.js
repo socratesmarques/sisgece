@@ -65,7 +65,7 @@ function formatCpf(value) {
   return formatDigits(value.replace(/\D/g, "").slice(0, 11), "###.###.###-##");
 }
 function formatPhone(value) {
-  const digits = value.replace(/\D/g, "").slice(0, 13);
+  const digits = value.replace(/\D/g, "").slice(0, 15);
   const countryCode = value.trim().startsWith("+55") || (digits.startsWith("55") && digits.length > 11);
   if (countryCode) {
     return formatDigits(digits, digits.length > 12 ? "+## (##) #####-####" : "+## (##) ####-####");
@@ -128,7 +128,7 @@ if ($("pedido")) {
     const digits = value.replace(/\D/g, "");
     const valid = value.startsWith("+55")
       ? [12, 13].includes(digits.length)
-      : value.startsWith("+") ? digits.length >= 10 && digits.length <= 13
+      : value.startsWith("+") ? digits.length >= 10 && digits.length <= 15
         : [10, 11].includes(digits.length);
     form.telefone.setCustomValidity(
       !value || valid ? "" : "Informe o telefone completo com DDD.",
@@ -136,6 +136,8 @@ if ($("pedido")) {
   });
   form.addEventListener("reset", () => form.telefone.setCustomValidity(""));
   bind("pedido", async (body) => {
+    body.whatsapp_consent = form.elements.whatsapp_consent.checked;
+    body.whatsapp_consent_version = form.elements.whatsapp_consent.dataset.version;
     const result = await api("solicitar", body);
     $("recibo").textContent =
       ("Solicitação salva. " + (body.tipo === "Entrada" ? "Seu pedido de entrada aguarda análise da coordenação." : "O envio ainda não autoriza a saída.")) + " Guarde seu código.\nCódigo de consulta: " +
@@ -151,6 +153,7 @@ if ($("pedido")) {
     movementGuide();
     form.origem.onchange();
     $("recibo").focus();
+    void notificationStatus(result.codigo);
   });
   bind("rastrear", async (body) => {
     $("resultado").textContent = "";
@@ -163,6 +166,7 @@ if ($("pedido")) {
     ]
       .filter(Boolean)
       .join(" · ");
+    void notificationStatus(body.codigo);
   });
 } else {
   bind("login", async (body) => {
@@ -229,9 +233,9 @@ if ($("pedido")) {
 async function list(page = 1) {
   const p = new URLSearchParams(fields($("filtro")));
   p.set("pagina", page);
-  const r = await api("pedidos?" + p);
   const el = $("lista");
   el.replaceChildren();
+  const r = await api("pedidos?" + p);
   if (!r.itens.length) node(el, "p", "Nenhuma solicitação encontrada.");
   for (const item of r.itens) {
     const line = node(el, "article");
@@ -253,10 +257,11 @@ async function list(page = 1) {
   pager(el, page, r.mais, list);
 }
 async function detail(id, page = 1) {
-  const r = await api("pedidos/" + id + "?pagina=" + page),
-    el = $("detalhe");
-  el.hidden = false;
+  const el = $("detalhe");
+  el.hidden = true;
   el.replaceChildren();
+  const r = await api("pedidos/" + id + "?pagina=" + page);
+  el.hidden = false;
   node(el, "h2", "Solicitação " + r.protocolo);
   const labels = {
     aluno: "Estudante",
@@ -282,7 +287,7 @@ async function detail(id, page = 1) {
     if (v) {
       const field = node(facts, "div");
       node(field, "dt", labels[k] || k[0].toUpperCase() + k.slice(1));
-      node(field, "dd", v);
+      node(field, "dd", k === "telefone" ? formatPhone(v) : v);
     }
   }
   if (r.status === "APROVADA" && ["saida","saída"].includes(r.tipo.toLowerCase())) {
@@ -370,6 +375,23 @@ async function detail(id, page = 1) {
     const save = button(el, "Registrar confirmação", () => send(user.perfil));
     save.disabled = true;
     box.onchange = () => (save.disabled = !box.checked);
+  }
+  if (["coordenação", "superusuário"].includes(user.perfil)) {
+    const section = node(el, "details");
+    node(section, "summary", "Notificações pelo WhatsApp");
+    const content = node(section, "div");
+    section.ontoggle = async () => {
+      if (!section.open) return;
+      content.replaceChildren();
+      try {
+        const records = await api("pedidos/" + id + "/notificacoes");
+        if (!records.itens.length) node(content, "p", "Nenhum envio registrado.");
+        for (const record of records.itens) {
+          node(content, "p", record.template_tipo + " · " + record.estado +
+            " · tentativas: " + record.tentativas + (record.resultado ? " · " + record.resultado : ""));
+        }
+      } catch (_) { node(content, "p", "Não foi possível consultar os envios."); }
+    };
   }
   node(el, "h3", "Histórico · horário de Fortaleza");
   for (const e of r.historico.itens)
@@ -459,4 +481,27 @@ async function requestHistory(page = 1) {
     node(line,"small",e.quando+" · "+e.protocolo);
   }
   pager(el,page,r.mais,requestHistory);
+}
+
+let notificationRequest = 0;
+async function notificationStatus(code) {
+  const version = ++notificationRequest;
+  const el = $("whatsapp-status");
+  el.replaceChildren();
+  try {
+    const state = await api("notificacoes/estado", {codigo: code});
+    if (version !== notificationRequest) return;
+    if (state.estado === "sem autorização") return;
+    node(el, "p", "WhatsApp: " + state.estado + " · " +
+      (state.destinatario === "responsavel" ? "Responsável" : "Solicitante") + " · " + state.telefone);
+    if (state.estado !== "revogada") {
+      button(el, "Revogar notificações", async () => {
+        await api("notificacoes/revogar", {codigo: code});
+        await notificationStatus(code);
+      });
+    }
+  } catch (_) {
+    if (version !== notificationRequest) return;
+    node(el, "p", "Não foi possível consultar as notificações. Seu código continua válido para acompanhar a solicitação.");
+  }
 }

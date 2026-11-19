@@ -109,6 +109,19 @@ python tests/browser.py
 
 A CI exercita PostgreSQL 17, a imagem Docker e Chromium. O navegador usa apenas arquivos locais ao servidor. Os limites usam janelas de dez minutos no PostgreSQL. Logins corretos não consomem tentativas. Após 15 falhas para o mesmo usuário e origem, novas tentativas dessa combinação são bloqueadas até a janela virar; após 60 falhas da mesma origem, o bloqueio vale para todos os usuários dessa origem. Formulário e consulta têm contadores independentes.
 
+## Notificações opcionais pelo WhatsApp
+
+O SISGECE inclui consentimento específico, envio automático após autorização, revogação,
+fila transacional e worker independente. A consulta pelo código continua igual.
+O provedor padrão é **mock**, sem rede ou cobrança. Telefones antigos não são
+considerados autorizados. Nenhum envio real ocorre sem habilitação explícita.
+
+Consulte [arquitetura, execução local, configuração Meta e operação](docs/NOTIFICACOES.md),
+[variáveis de exemplo](.env.example) e [evidências de testes](docs/VALIDACAO-NOTIFICACOES.md).
+Em desenvolvimento, após as migrações, execute `python -m backend.notifications.worker`
+em outro terminal com o mesmo banco. A implantação exige um contêiner separado
+para esse comando, sem portas públicas; consulte o roteiro antes de atualizar.
+
 ## Contexto para novas conversas e agentes de IA
 
 Para transferir o conhecimento do projeto sem confundir implementação, PRs e implantação:

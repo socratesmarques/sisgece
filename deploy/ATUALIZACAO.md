@@ -170,3 +170,22 @@ Confira `/api/ready` e o acesso HTTPS novamente. Pedidos registrados após o bac
 não estarão no banco restaurado; preserve-os no banco migrado para reconciliação
 antes de retomar o atendimento. Atualize a configuração operacional do banco
 escolhido antes de uma próxima implantação.
+
+## Complemento: versão com notificações (migração 007)
+
+Leia [o procedimento específico](../docs/NOTIFICACOES.md#docker-e-atualização).
+A migração 007 é aditiva e não autoriza telefones antigos. Confirme `007.sql` em
+`versoes`. Mantenha `NOTIFICATIONS_PROVIDER=mock` e `WHATSAPP_REAL_SEND_ENABLED=0`
+na primeira implantação. O exemplo de variáveis não deve sobrescrever seus PG*
+e SISGECE_PROXY_SECRET existentes.
+
+Se o worker `sisgece-notifications` já existir, pare-o **junto com a aplicação,
+antes do backup**, e substitua-o pela mesma imagem nova depois da migração.
+Na primeira implantação crie-o conforme a documentação, sem `-p`, com o
+healthcheck HTTP herdado desativado. Mantenha o PostgreSQL privado e o volume atual.
+
+Em qualquer rollback, pare também o worker. Não volte a processar uma fila de
+backup com envio real habilitado: mensagens aceitas após o backup podem ser
+repetidas. Preserve o banco migrado e concilie os registros antes de reativar.
+A publicação do webhook e habilitação Meta são mudanças operacionais futuras que
+exigem revisão institucional. Este roteiro não executa essas ações automaticamente.
