@@ -646,33 +646,54 @@ footer b {
 .editor-actions{justify-content:flex-end;border-top:1px solid var(--line);padding-top:1rem}#cancelar{color:var(--ink);background:#edf2ee}#erro-conta:not(:empty){color:#8b3223;margin-top:.75rem}
 @media(max-width:620px){.person{grid-template-columns:minmax(0,1fr) auto}.person div{grid-column:1/-1}.person button{grid-column:2;grid-row:2/4}.person .access-state{grid-column:1}.directory-head{align-items:start}.role-name{font-size:.9rem}}
 
-/* Créditos institucionais no rodapé, com leitura em desktop e mobile. */
+/* Rodapé LSD: identidade visual do SISGECE, centralizado e responsivo. */
 .site-footer {
-  flex-wrap: wrap;
-  gap: 0.5rem 1.5rem;
-}
-.footer-identity {
-  display: flex;
-  flex-wrap: wrap;
+  margin-top: 3rem;
+  padding: 0;
+  flex-direction: column;
+  justify-content: center;
   align-items: center;
-  gap: 0.4rem 0.75rem;
+  gap: 0;
+  border: 0;
+  background: var(--ink);
+  color: #f5f7fb;
 }
-.footer-credits {
-  margin: 0;
-  line-height: 1.6;
+.site-footer__content {
+  width: 100%;
+  padding: 2.5rem 1.5rem 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.footer-credits a {
-  color: var(--green);
-  font-weight: 650;
-  text-underline-offset: 0.18em;
+.site-footer__brand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.35rem;
 }
-.footer-credits a:hover {
-  text-decoration-thickness: 2px;
+.site-footer__brand img {
+  display: block;
+  width: 80px;
+  height: auto;
 }
-@media (max-width: 760px) {
-  .site-footer {
-    flex-direction: column;
-    align-items: flex-start;
+.site-footer__bottom {
+  width: 100%;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 1.2rem 1rem 1.5rem;
+  text-align: center;
+}
+.site-footer__bottom p {
+  margin: 0.2rem 0;
+  color: rgba(245, 247, 251, 0.85);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+@media (max-width: 520px) {
+  .site-footer__content {
+    padding: 2rem 1rem 1.5rem;
+  }
+  .site-footer__bottom p {
+    font-size: 0.82rem;
   }
 }
 
