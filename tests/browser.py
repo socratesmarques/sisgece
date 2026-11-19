@@ -211,8 +211,9 @@ with sync_playwright() as pw:
             public.goto(url)
             public.wait_for_load_state("networkidle")
             form = public.locator("#pedido")
+            expect(public.locator(".guide")).to_have_count(0)  # Saída
             form.get_by_role("radio", name="Entrada", exact=True).check()
-            expect(public.locator("#guia-entrada")).to_be_visible()
+            expect(public.locator(".guide")).to_have_count(0)  # Entrada
             entry = dict(values, aluno="Aluno " + "L" * 194, matricula="ENTRADA-" + secrets.token_hex(5), justificativa="Atendimento de teste no campus")
             for key, value in entry.items():
                 if key not in ("cpf", "parentesco"):
