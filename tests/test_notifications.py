@@ -477,7 +477,10 @@ class Notifications(unittest.TestCase):
                 return conn.execute(
                     'SELECT status,etapa FROM solicitacoes WHERE id=%s', (sid,)).fetchone()
 
-        listing_url = '/api/pedidos?tipo=Entrada'
+        with self.conn() as conn:
+            protocol = conn.execute(
+                'SELECT protocolo FROM solicitacoes WHERE id=%s', (sid,)).fetchone()['protocolo']
+        listing_url = '/api/pedidos?tipo=Entrada&q=' + protocol
         detail_url = '/api/pedidos/' + str(sid)
         self.assertFalse(clients['recepção'].get(listing_url).json['itens'])
         self.assertEqual(clients['recepção'].get(detail_url).status_code, 404)
