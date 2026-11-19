@@ -112,10 +112,12 @@ class Notifications(unittest.TestCase):
             'EVOLUTION_ALLOWED_RECIPIENTS': '+5511999999999',
             'EVOLUTION_FEEDBACK_ENABLED': '1',
         }):
+            created_sids = []
             for phone in ('85987654321', '85988887777'):
                 receipt = self.submit(telefone=phone, without_whatsapp_fields=True)
                 self.assertEqual(receipt.status_code, 201)
                 sid = self.latest()
+                created_sids.append(sid)
                 with self.conn() as conn:
                     consent = conn.execute("""SELECT a.provedor,a.consentimento_versao,a.avaliacao_consentida,
                         n.telefone,n.estado FROM notificacao_assinaturas a
@@ -129,7 +131,9 @@ class Notifications(unittest.TestCase):
                 self.assertEqual(self.post('notificacoes/estado', receipt.json).json['estado'], 'ativa')
             # Limpa fila criada neste teste; nenhum envio externo.
             with self.conn() as conn:
-                conn.execute("DELETE FROM notificacoes WHERE provedor='evolution'")
+                conn.execute(
+                    "DELETE FROM notificacoes WHERE provedor='evolution' AND solicitacao=ANY(%s)",
+                    (created_sids,))
                 conn.execute("TRUNCATE notificacao_ritmo")
 
     def test_evolution_auto_feedback_requires_feature_flag(self):
