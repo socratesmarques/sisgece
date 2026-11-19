@@ -112,13 +112,6 @@ function maskInput(input, format, validate = () => {}) {
 }
 if ($("pedido")) {
   const form = $("pedido");
-  function movementGuide() {
-    const entry = form.elements.tipo.value === "Entrada";
-    $("guia-entrada").hidden = !entry;
-    $("guia-saida").hidden = entry;
-  }
-  form.querySelectorAll("[name=tipo]").forEach(radio => radio.addEventListener("change", movementGuide));
-  movementGuide();
   form.origem.onchange = () => {
     $("familia").hidden = $("familia").disabled =
       form.origem.value !== "Responsável";
@@ -147,7 +140,6 @@ if ($("pedido")) {
         $("aviso").textContent = "Código copiado.";
       });
     form.reset();
-    movementGuide();
     form.origem.onchange();
     $("recibo").focus();
     void notificationStatus(result.codigo);

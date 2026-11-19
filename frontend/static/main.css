@@ -295,7 +295,7 @@ section > p {
 .services {
   margin-top: 1.5rem;
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(16rem, 0.8fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 1.3rem;
   align-items: start;
 }
