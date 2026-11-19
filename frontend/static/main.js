@@ -140,7 +140,6 @@ if ($("pedido")) {
         $("aviso").textContent = "Código copiado.";
       });
     form.reset();
-    movementGuide();
     form.origem.onchange();
     $("recibo").focus();
     void notificationStatus(result.codigo);
