@@ -82,7 +82,7 @@ permanecem independentes.
 A pesquisa só é incluída no último aviso quando
 `EVOLUTION_FEEDBACK_ENABLED=1` estiver ativo tanto no app quanto no
 worker e a integração de retorno estiver configurada. Os eventos finais
-são: aprovação de entrada, recusa ou saída registrada pela portaria.
+são: entrada confirmada pela recepção, recusa ou saída registrada pela portaria. A aprovação da entrada pela coordenação ainda não encerra o processo; somente a recepção registra a conclusão da entrada, sem etapa de portaria.
 
 O destinatário recebe um comando no formato:
 
