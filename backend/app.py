@@ -14,8 +14,9 @@ from flask import Flask, abort, g, jsonify, render_template, request
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from backend.notifications.webhooks import register as register_webhook
+from backend.notifications.feedback import register as register_evolution_feedback
 from backend.notifications.outbox import enqueue
-from backend.notifications.config import CONSENT_VERSION, CONSENT_TEXT
+from backend.notifications.config import CONSENT_VERSION, CONSENT_TEXT, automatic_notifications_enabled
 from backend.notifications.phone import normalize_phone
 from backend.notifications.consent import subscribe
 from backend.notifications.routes import register as register_notifications
@@ -55,7 +56,7 @@ def finish(response):
             "X-Content-Type-Options": "nosniff",
             "X-Frame-Options": "DENY",
             "Referrer-Policy": "no-referrer",
-            "Content-Security-Policy": "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+            "Content-Security-Policy": "default-src 'self'; img-src 'self' https://acervo.ifce.edu.br; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
         }
     )
     if not LOCAL:
@@ -83,7 +84,7 @@ def database_error(e):
 
 @app.before_request
 def protect():
-    if request.endpoint == "whatsapp_webhook":
+    if request.endpoint in ("whatsapp_webhook", "evolution_feedback_webhook"):
         request.max_content_length = 1048576
         return
     if request.method == "POST":
@@ -195,7 +196,8 @@ def event(action, sid=None, note=None):
 def home():
     return render_template("home.html", equipe=request.path == "/equipe",
                            whatsapp_consent_version=CONSENT_VERSION,
-                           whatsapp_consent_text=CONSENT_TEXT)
+                           whatsapp_consent_text=CONSENT_TEXT,
+                            whatsapp_auto_mode=automatic_notifications_enabled())
 
 
 @app.get("/api/ready")
@@ -589,3 +591,5 @@ def account():
 register_notifications(app, db, query, value, limit, staff)
 
 register_webhook(app, db)
+
+register_evolution_feedback(app, db, staff)

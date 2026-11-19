@@ -1,6 +1,7 @@
 """python -m backend.notifications.worker [--once]. Somente fila PostgreSQL."""
 import argparse
 import hashlib
+import os
 import random
 import secrets
 import signal
@@ -9,7 +10,7 @@ import time
 import psycopg
 from psycopg.rows import dict_row
 
-from .config import provider_name, CONSENT_VERSION, authorized_without_challenge
+from .config import provider_name, CONSENT_VERSION, LAB_AUTO_VERSION, AUTO_CONTACT_VERSION, authorized_without_challenge
 from .providers import MockProvider, Result
 from .webhooks import reconcile
 
@@ -39,11 +40,16 @@ def recover(conn):
 def claim(provider):
     with connection() as conn:
         recover(conn)
+        accepted = [CONSENT_VERSION]
+        if provider == 'evolution':
+            accepted.append(AUTO_CONTACT_VERSION)
+            if os.getenv('EVOLUTION_LAB_ENABLED') == '1' and os.getenv('EVOLUTION_LAB_AUTO_FLOW') == '1':
+                accepted.append(LAB_AUTO_VERSION)
         row = conn.execute('''SELECT n.* FROM notificacoes n
             JOIN notificacao_assinaturas a ON a.id=n.assinatura
-            WHERE n.estado='pending' AND n.provedor=%s AND (a.verificado_em IS NOT NULL OR a.consentimento_versao=%s)
+            WHERE n.estado='pending' AND n.provedor=%s AND (a.verificado_em IS NOT NULL OR a.consentimento_versao=ANY(%s))
             AND a.revogado_em IS NULL AND n.proxima_tentativa<=clock_timestamp()
-            ORDER BY n.proxima_tentativa,n.id LIMIT 1 FOR UPDATE OF n SKIP LOCKED''', (provider,CONSENT_VERSION)).fetchone()
+            ORDER BY n.proxima_tentativa,n.id LIMIT 1 FOR UPDATE OF n SKIP LOCKED''', (provider,accepted)).fetchone()
         if not row:
             return None
         token = secrets.token_hex(16)
@@ -56,7 +62,9 @@ def prepare(row):
     with connection() as conn:
         # Mesmo ordenamento de bloqueios que a revogação: assinatura, depois fila.
         active = conn.execute('''SELECT a.verificado_em,a.revogado_em,a.consentimento_versao,s.status,s.etapa,
-            s.declarado->>'telefone' AS telefone FROM notificacao_assinaturas a
+            s.declarado->>'telefone' AS telefone, s.tipo AS solicitacao_tipo,
+            s.data_solicitada AS solicitacao_data,
+            s.horario_solicitado AS solicitacao_horario FROM notificacao_assinaturas a
             JOIN solicitacoes s ON s.id=a.solicitacao WHERE a.id=%s FOR UPDATE OF a''',
             (row['assinatura'],)).fetchone()
         current = conn.execute('''SELECT * FROM notificacoes WHERE id=%s AND estado='processing'
@@ -69,6 +77,11 @@ def prepare(row):
             active['etapa'] != row['etapa_origem']):
             conn.execute("UPDATE notificacoes SET estado='cancelled',resultado='authorization_changed' WHERE id=%s",(row['id'],))
             return False
+        # Dados mínimos da solicitação já autorizada; não incluem nome, CPF,
+        # matrícula, justificativa, protocolo ou código público.
+        row['solicitacao_tipo'] = active['solicitacao_tipo']
+        row['solicitacao_data'] = active['solicitacao_data']
+        row['solicitacao_horario'] = active['solicitacao_horario']
         if current['tentativas'] >= MAX_ATTEMPTS:
             conn.execute("UPDATE notificacoes SET estado='failed',resultado='attempts_exhausted' WHERE id=%s",(row['id'],))
             return False
@@ -89,6 +102,15 @@ def prepare(row):
             conn.execute('UPDATE notificacao_ritmo SET disponivel_em=clock_timestamp()+make_interval(secs=>%s) WHERE chave=%s',(seconds,key))
         conn.execute('''UPDATE notificacoes SET despacho_em=clock_timestamp(),tentativas=tentativas+1
             WHERE id=%s''',(row['id'],))
+        row['avaliacao_codigo'] = None
+        if row['provedor'] == 'evolution' and os.getenv('EVOLUTION_FEEDBACK_ENABLED') == '1':
+            feedback = conn.execute('''SELECT f.codigo FROM notificacao_avaliacoes f
+                JOIN notificacao_assinaturas a ON a.id=f.assinatura
+                WHERE f.notificacao=%s AND f.nota IS NULL AND f.cancelado_em IS NULL
+                  AND f.expira_em>clock_timestamp() AND a.avaliacao_consentida
+                  AND a.revogado_em IS NULL''', (row['id'],)).fetchone()
+            if feedback:
+                row['avaliacao_codigo'] = feedback['codigo']
         return True
 
 
@@ -136,9 +158,12 @@ def main():
     args = parser.parse_args()
     if provider_name() == 'mock':
         provider = MockProvider()
-    else:
+    elif provider_name() == 'meta':
         from .meta import MetaProvider
         provider = MetaProvider()
+    else:
+        from .evolution import EvolutionProvider
+        provider = EvolutionProvider()
     stopping = False
     def stop(*_):
         nonlocal stopping

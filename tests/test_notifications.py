@@ -54,6 +54,9 @@ class Notifications(unittest.TestCase):
                     tipo='Saída',data='2030-01-01',hora='12:00',justificativa='Teste',
                     whatsapp_consent=True,whatsapp_consent_version=CONSENT_VERSION,
                     whatsapp_recipient='responsavel')
+        # Reproduz o formulário atual: sem caixas ou campos ocultos de autorização.
+        if kw.pop('without_whatsapp_fields', False):
+            body = {key: val for key, val in body.items() if not key.startswith('whatsapp_')}
         body.update(kw)
         return self.post('solicitar', body)
 
@@ -96,6 +99,51 @@ class Notifications(unittest.TestCase):
             token, _ = challenge(conn,self.latest())
             conn.execute("UPDATE notificacao_assinaturas SET desafio_expira=now()-interval '1 second'")
             self.assertFalse(confirm(conn,token,'5585987654321','mock'))
+
+    def test_evolution_auto_notifies_all_valid_phone_numbers(self):
+        from backend.notifications.config import AUTO_CONTACT_VERSION
+        from backend.notifications.worker import claim, prepare
+        # A automatização não depende de LOCAL_HTTP, allowlist ou flags de laboratório.
+        with patch.dict(os.environ, {
+            'NOTIFICATIONS_PROVIDER': 'evolution',
+            'LOCAL_HTTP': '0',
+            'EVOLUTION_LAB_ENABLED': '0',
+            'EVOLUTION_LAB_AUTO_FLOW': '0',
+            'EVOLUTION_ALLOWED_RECIPIENTS': '+5511999999999',
+            'EVOLUTION_FEEDBACK_ENABLED': '1',
+        }):
+            for phone in ('85987654321', '85988887777'):
+                receipt = self.submit(telefone=phone, without_whatsapp_fields=True)
+                self.assertEqual(receipt.status_code, 201)
+                sid = self.latest()
+                with self.conn() as conn:
+                    consent = conn.execute("""SELECT a.provedor,a.consentimento_versao,a.avaliacao_consentida,
+                        n.telefone,n.estado FROM notificacao_assinaturas a
+                        JOIN notificacoes n ON n.assinatura=a.id
+                        WHERE a.solicitacao=%s""", (sid,)).fetchone()
+                    self.assertEqual(consent['provedor'], 'evolution')
+                    self.assertEqual(consent['consentimento_versao'], AUTO_CONTACT_VERSION)
+                    self.assertTrue(consent['avaliacao_consentida'])
+                    self.assertEqual(consent['estado'], 'pending')
+                    self.assertTrue(consent['telefone'].startswith('+55'))
+                self.assertEqual(self.post('notificacoes/estado', receipt.json).json['estado'], 'ativa')
+            # Limpa fila criada neste teste; nenhum envio externo.
+            with self.conn() as conn:
+                conn.execute("DELETE FROM notificacoes WHERE provedor='evolution'")
+                conn.execute("TRUNCATE notificacao_ritmo")
+
+    def test_evolution_auto_feedback_requires_feature_flag(self):
+        with patch.dict(os.environ, {
+            'NOTIFICATIONS_PROVIDER': 'evolution',
+            'EVOLUTION_FEEDBACK_ENABLED': '0',
+            'EVOLUTION_ALLOWED_RECIPIENTS': '',
+        }):
+            receipt = self.submit(without_whatsapp_fields=True)
+            self.assertEqual(receipt.status_code, 201)
+            with self.conn() as conn:
+                row = conn.execute("SELECT avaliacao_consentida FROM notificacao_assinaturas WHERE solicitacao=%s",
+                                   (self.latest(),)).fetchone()
+                self.assertFalse(row['avaliacao_consentida'])
 
     def test_control_security(self):
         self.assertEqual(self.client.post('/api/notificacoes/revogar',json={}).status_code,403)
@@ -166,6 +214,74 @@ class Notifications(unittest.TestCase):
             self.assertEqual(row['estado'],'sent')
             self.assertEqual(row['tentativas'],1)
             self.assertTrue(row['externo_id'].startswith('mock-'))
+
+    def test_approval_worker_loads_request_date_and_time(self):
+        from backend.notifications.worker import process_one
+        from backend.notifications.providers import MockProvider
+        from datetime import date, time
+        self.clear_queue()
+        sid = self.verified()
+        # Só para o teste: transformar a notificação existente em evento de aprovação.
+        with self.conn() as conn:
+            conn.execute("""UPDATE solicitacoes SET status='APROVADA'
+                            WHERE id=%s""", (sid,))
+            conn.execute("""UPDATE notificacoes SET template_tipo='aprovar',
+                            status_origem='APROVADA' WHERE solicitacao=%s""", (sid,))
+        provider = MockProvider()
+        self.assertTrue(process_one(provider))
+        self.assertEqual(len(provider.messages), 1)
+        msg = provider.messages[0]['text']
+        self.assertIn('Tipo: Saída', msg)
+        self.assertIn('Data: 01/01/2030', msg)
+        self.assertIn('Horário: 12:00', msg)
+        self.assertNotIn('Fictício', msg)
+        self.assertNotIn('12345678901', msg)
+
+    def test_evolution_feedback_opt_in_response_and_replay(self):
+        from backend.notifications.outbox import enqueue
+        from backend.notifications.worker import process_one
+        from backend.notifications.evolution import EvolutionProvider
+        from backend.notifications.feedback import extract_rating
+        import json
+        env = dict(NOTIFICATIONS_PROVIDER='evolution', EVOLUTION_FEEDBACK_ENABLED='1',
+            EVOLUTION_FEEDBACK_WEBHOOK_TOKEN='t'*40, EVOLUTION_INSTANCE='sisgece-teste',
+            EVOLUTION_API_URL='http://evolution:8080', EVOLUTION_API_KEY='testing-only',
+            EVOLUTION_LAB_ENABLED='1', EVOLUTION_ALLOWED_RECIPIENTS='+5585987654321',
+            WHATSAPP_REAL_SEND_ENABLED='1')
+        self.clear_queue()
+        with patch.dict(os.environ, env):
+            self.assertEqual(self.submit(whatsapp_feedback_consent='sim').status_code,400)
+            self.assertEqual(self.submit(whatsapp_feedback_consent=True,whatsapp_consent=False).status_code,400)
+            self.assertEqual(self.submit(whatsapp_feedback_consent=True).status_code,201)
+            sid = self.latest()
+            with self.conn() as conn:
+                conn.execute("UPDATE solicitacoes SET status='APROVADA',etapa='saída concluída' WHERE id=%s",(sid,))
+                eid = conn.execute("INSERT INTO eventos(solicitacao,acao) VALUES (%s,'portaria') RETURNING id",(sid,)).fetchone()['id']
+                enqueue(conn,sid,eid,'portaria')
+                survey = conn.execute("SELECT codigo FROM notificacao_avaliacoes WHERE solicitacao=%s",(sid,)).fetchone()
+                self.assertEqual(len(survey['codigo']),16)
+            with patch('backend.notifications.evolution.http_send',return_value=b'{"key":{"id":"accepted"}}') as http:
+                self.assertTrue(process_one(EvolutionProvider()))
+                body = json.loads(http.call_args.args[0].data)
+                self.assertIn('AVALIAR '+survey['codigo']+' 5',body['text'])
+                self.assertNotIn('Para acompanhar o andamento',body['text'])
+            url = '/api/notificacoes/evolution/avaliacao'
+            payload = {'instance':'sisgece-teste','event':'messages.upsert','data':{
+                'key':{'id':'msg-1','remoteJid':'5585987654321@s.whatsapp.net','fromMe':False},
+                'message':{'conversation':'AVALIAR '+survey['codigo']+' 4'}}}
+            self.assertEqual(self.client.post(url,json=payload).status_code,403)
+            headers = {'X-SISGECE-Evolution-Secret':'t'*40}
+            payload['data']['key']['remoteJid']='5585987654322@s.whatsapp.net'
+            self.assertEqual(self.client.post(url,json=payload,headers=headers).status_code,200)
+            payload['data']['key']['remoteJid']='5585987654321@s.whatsapp.net'
+            self.assertEqual(self.client.post(url,json=payload,headers=headers).status_code,200)
+            payload['data']['message']['conversation']='AVALIAR '+survey['codigo']+' 1'
+            self.assertEqual(self.client.post(url,json=payload,headers=headers).status_code,200)
+            with self.conn() as conn:
+                self.assertEqual(conn.execute("SELECT nota FROM notificacao_avaliacoes WHERE solicitacao=%s",(sid,)).fetchone()['nota'],4)
+            with self.conn() as conn:
+                revoke(conn,sid)
+            self.assertEqual(self.client.post(url,json=payload,headers=headers).status_code,200)
 
     def test_retry_permanent_and_uncertain(self):
         from backend.notifications.worker import process_one
