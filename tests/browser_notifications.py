@@ -24,9 +24,15 @@ with sync_playwright() as pw:
                                data='2030-01-01', hora='12:00',
                                justificativa='Teste').items():
             form.locator('[name='+key+']').fill(value)
-        form.get_by_role('button', name='Enviar solicitação').click()
-        expect(page.locator('#recibo')).to_contain_text('Solicitação salva')
-        code = page.locator('#recibo').inner_text().splitlines()[-1].split(': ')[1]
+        with page.expect_response(lambda response: response.url.endswith('/api/solicitar') and response.request.method == 'POST') as submitted:
+            form.get_by_role('button', name='Enviar solicitação').click()
+        receipt = page.locator('#recibo')
+        expect(receipt).to_contain_text('Solicitação enviada com sucesso!')
+        expect(receipt).not_to_contain_text('WhatsApp')
+        expect(page.locator('#copiar')).to_have_count(0)
+        expect(page.locator('#whatsapp-status')).to_have_count(0)
+        code = submitted.value.json()['codigo']
+        expect(receipt).not_to_contain_text(code)
         response = page.request.post(url+'/api/consulta', data={'codigo':code},
                                      headers={'X-SISGECE':'1'})
         assert response.status == 200
