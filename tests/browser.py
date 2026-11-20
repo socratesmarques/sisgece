@@ -114,15 +114,19 @@ with sync_playwright() as pw:
                 form.locator(f"[name={k}]").select_option(v)
             else:
                 form.locator(f"[name={k}]").fill(v)
-        form.get_by_role("button").click()
+        with page.expect_response(lambda response: response.url.endswith("/api/solicitar") and response.request.method == "POST") as submitted:
+            form.get_by_role("button").click()
+        code = submitted.value.json()["codigo"]
         receipt = page.locator("#recibo")
-        expect(receipt).to_contain_text("Solicitação salva")
+        expect(receipt).to_contain_text("Solicitação enviada com sucesso!")
+        expect(receipt).not_to_contain_text(code)
+        expect(page.locator("#copiar")).to_have_count(0)
+        expect(page.locator("#whatsapp-status")).to_have_count(0)
         expect(form.locator("[name=telefone]")).to_have_value("")
         expect(form.locator("[name=cpf]")).to_have_value("")
         expect(form.locator("[name=parentesco]")).to_have_value("")
         expect(page.locator("#familia")).to_be_hidden()
-        lines = receipt.inner_text().splitlines()
-        assert consult_via_api(page, lines[-1].split(": ")[1])["status"] == "PENDENTE"
+        assert consult_via_api(page, code)["status"] == "PENDENTE"
         assert page.locator("#rastrear").count() == 0
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         page.close()
@@ -218,9 +222,10 @@ with sync_playwright() as pw:
             for key, value in entry.items():
                 if key not in ("cpf", "parentesco"):
                     form.locator(f"[name={key}]").fill(value)
-            form.get_by_role("button", name="Enviar solicitação").click()
-            expect(public.locator("#recibo")).to_contain_text("aguarda análise")
-            code = public.locator("#recibo").inner_text().splitlines()[-1].split(": ")[1]
+            with public.expect_response(lambda response: response.url.endswith("/api/solicitar") and response.request.method == "POST") as submitted:
+                form.get_by_role("button", name="Enviar solicitação").click()
+            expect(public.locator("#recibo")).to_contain_text("O pedido será analisado")
+            code = submitted.value.json()["codigo"]
             assert consult_via_api(public, code)["status"] == "PENDENTE"
             staff.locator("#filtro [name=q]").fill(entry["matricula"])
             staff.evaluate("""() => {
