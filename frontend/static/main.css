@@ -632,7 +632,7 @@ footer b {
 .movimento label{display:flex;align-items:center;gap:.65rem;border:1px solid var(--line);border-radius:.6rem;padding:.7rem;cursor:pointer}
 .movimento label:has(:checked){background:#e1f2e8;border-color:var(--green)}
 .movimento input{accent-color:var(--green);width:1.1rem!important;min-height:0!important;margin:0!important}
-.areas{display:flex;gap:.4rem;margin:1.2rem 0 0;border-bottom:1px solid var(--line)}
+.areas{display:flex;flex-wrap:wrap;min-width:0;gap:.4rem;margin:1.2rem 0 0;border-bottom:1px solid var(--line)}
 .areas button{background:transparent;color:var(--muted);border-radius:0;border-bottom:3px solid transparent}
 .areas [aria-pressed=true]{color:var(--green);border-color:var(--green)}
 .directory-head,.editor-actions{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
