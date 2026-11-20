@@ -111,6 +111,89 @@ class EvolutionTransport(unittest.TestCase):
             self.assertEqual(p.send(self.row).code, 'evolution_disabled')
         self.http.assert_not_called()
 
+    @staticmethod
+    def final_notice(**overrides):
+        row = dict(id=12, telefone='+5585987654321', template_tipo='recepção',
+                   solicitacao_tipo='Entrada', status_origem='APROVADA',
+                   etapa_origem='entrada concluída', avaliacao_codigo='0123456789ABCDEF')
+        row.update(overrides)
+        return row
+
+    def test_send_five_list_options_when_enabled(self):
+        self.http.side_effect = None
+        self.http.return_value = b'{"key":{"id":"list-ok"}}'
+        row = self.final_notice()
+        self.assertEqual(EvolutionProvider().send(row).state, 'sent')
+        self.assertIn('/sendText/', self.http.call_args.args[0].full_url)
+        with patch.dict(os.environ, {'EVOLUTION_FEEDBACK_ENABLED': '1',
+                                     'EVOLUTION_FEEDBACK_LIST_ENABLED': '1'}):
+            result = EvolutionProvider().send(row)
+            self.assertEqual((result.state, result.external_id), ('sent', 'list-ok'))
+            request = self.http.call_args.args[0]
+            self.assertIn('/message/sendList/sisgece-teste', request.full_url)
+            body = json.loads(request.data)
+            self.assertEqual(body['number'], '5585987654321')
+            self.assertEqual(body['buttonText'], 'Escolher nota')
+            self.assertIn('entrada foi concluída', body['description'])
+            self.assertEqual([item['rowId'] for item in body['sections'][0]['rows']],
+                             ['AVALIAR 0123456789ABCDEF ' + str(i) for i in range(1, 6)])
+            self.assertNotIn('cpf', str(body).lower())
+            self.assertNotIn('matricula', str(body).lower())
+
+    def test_list_explicit_422_falls_back_to_text(self):
+        self.http.side_effect = [
+            HTTPError('http://evolution:8080', 422, 'unsupported', {}, BytesIO(b'no')),
+            b'{"key":{"id":"fallback-ok"}}',
+        ]
+        with patch.dict(os.environ, {'EVOLUTION_FEEDBACK_ENABLED': '1',
+                                     'EVOLUTION_FEEDBACK_LIST_ENABLED': '1'}):
+            row = self.final_notice(template_tipo='portaria', solicitacao_tipo='Saída',
+                                    etapa_origem='saída concluída')
+            outcome = EvolutionProvider().send(row)
+            self.assertEqual((outcome.state, outcome.code, outcome.external_id),
+                             ('sent', 'evolution_accepted_text_fallback', 'fallback-ok'))
+            self.assertEqual(self.http.call_count, 2)
+            requests = [call.args[0] for call in self.http.call_args_list]
+            self.assertIn('/sendList/', requests[0].full_url)
+            self.assertIn('/sendText/', requests[1].full_url)
+            self.assertIn('AVALIAR 0123456789ABCDEF 5',
+                          json.loads(requests[1].data)['text'])
+
+    def test_ambiguous_list_response_does_not_double_send(self):
+        with patch.dict(os.environ, {'EVOLUTION_FEEDBACK_ENABLED': '1',
+                                     'EVOLUTION_FEEDBACK_LIST_ENABLED': '1'}):
+            for failure in (TimeoutError(), URLError('connection reset')):
+                with self.subTest(failure=type(failure).__name__):
+                    self.http.reset_mock()
+                    self.http.side_effect = failure
+                    self.assertEqual(EvolutionProvider().send(self.final_notice()).state,
+                                     'uncertain')
+                    self.assertEqual(self.http.call_count, 1)
+            self.http.reset_mock()
+            self.http.side_effect = None
+            self.http.return_value = b'{}'
+            self.assertEqual(EvolutionProvider().send(self.final_notice()).state, 'uncertain')
+            self.assertEqual(self.http.call_count, 1)
+
+    def test_pending_rejected_or_without_consent_always_uses_text(self):
+        self.http.side_effect = None
+        self.http.return_value = b'{"key":{"id":"text-ok"}}'
+        with patch.dict(os.environ, {'EVOLUTION_FEEDBACK_ENABLED': '1',
+                                     'EVOLUTION_FEEDBACK_LIST_ENABLED': '1'}):
+            for row in (
+                self.final_notice(status_origem='PENDENTE'),
+                self.final_notice(etapa_origem='aguardando recepção'),
+                self.final_notice(avaliacao_codigo=None),
+                self.final_notice(template_tipo='reprovar', status_origem='REPROVADA'),
+                self.final_notice(template_tipo='recepção', solicitacao_tipo='Saída'),
+                self.final_notice(template_tipo='aprovar'),
+                self.final_notice(corpo_personalizado='Mensagem sem convite de pesquisa.',
+                                  mensagem_completa=True),
+            ):
+                with self.subTest(row=row):
+                    self.assertEqual(EvolutionProvider().send(row).state, 'sent')
+                    self.assertIn('/sendText/', self.http.call_args.args[0].full_url)
+
 
 if __name__ == '__main__':
     unittest.main()

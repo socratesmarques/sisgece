@@ -241,6 +241,25 @@ class Notifications(unittest.TestCase):
         self.assertNotIn('Fictício', msg)
         self.assertNotIn('12345678901', msg)
 
+    def test_rejected_request_never_creates_satisfaction_invite(self):
+        from backend.notifications.outbox import enqueue
+        self.clear_queue()
+        with patch.dict(os.environ, {'NOTIFICATIONS_PROVIDER': 'evolution',
+                                     'EVOLUTION_FEEDBACK_ENABLED': '1'}):
+            self.assertEqual(self.submit(whatsapp_feedback_consent=True).status_code, 201)
+            sid = self.latest()
+            with self.conn() as conn:
+                conn.execute("UPDATE solicitacoes SET status='REPROVADA' WHERE id=%s", (sid,))
+                eid = conn.execute(
+                    "INSERT INTO eventos(solicitacao,acao) VALUES (%s,'reprovar') RETURNING id",
+                    (sid,),
+                ).fetchone()['id']
+                enqueue(conn, sid, eid, 'reprovar')
+                self.assertEqual(conn.execute(
+                    "SELECT count(*) AS total FROM notificacao_avaliacoes WHERE solicitacao=%s",
+                    (sid,),
+                ).fetchone()['total'], 0)
+
     def test_evolution_feedback_opt_in_response_and_replay(self):
         from backend.notifications.outbox import enqueue
         from backend.notifications.worker import process_one
@@ -248,6 +267,7 @@ class Notifications(unittest.TestCase):
         from backend.notifications.feedback import extract_rating
         import json
         env = dict(NOTIFICATIONS_PROVIDER='evolution', EVOLUTION_FEEDBACK_ENABLED='1',
+            EVOLUTION_FEEDBACK_LIST_ENABLED='1',
             EVOLUTION_FEEDBACK_WEBHOOK_TOKEN='t'*40, EVOLUTION_INSTANCE='sisgece-teste',
             EVOLUTION_API_URL='http://evolution:8080', EVOLUTION_API_KEY='testing-only',
             EVOLUTION_LAB_ENABLED='1', EVOLUTION_ALLOWED_RECIPIENTS='+5585987654321',
@@ -267,19 +287,23 @@ class Notifications(unittest.TestCase):
             with patch('backend.notifications.evolution.http_send',return_value=b'{"key":{"id":"accepted"}}') as http:
                 self.assertTrue(process_one(EvolutionProvider()))
                 body = json.loads(http.call_args.args[0].data)
-                self.assertIn('AVALIAR '+survey['codigo']+' 5',body['text'])
-                self.assertNotIn('Para acompanhar o andamento',body['text'])
+                self.assertIn('/message/sendList/', http.call_args.args[0].full_url)
+                self.assertIn('AVALIAR '+survey['codigo']+' 5',body['description'])
+                self.assertEqual([r['rowId'] for r in body['sections'][0]['rows']],
+                                 ['AVALIAR '+survey['codigo']+' '+str(i) for i in range(1,6)])
+                self.assertNotIn('Para acompanhar o andamento',body['description'])
             url = '/api/notificacoes/evolution/avaliacao'
             payload = {'instance':'sisgece-teste','event':'messages.upsert','data':{
                 'key':{'id':'msg-1','remoteJid':'5585987654321@s.whatsapp.net','fromMe':False},
-                'message':{'conversation':'AVALIAR '+survey['codigo']+' 4'}}}
+                'message':{'listResponseMessage':{'singleSelectReply':{
+                    'selectedRowId':'AVALIAR '+survey['codigo']+' 4'}}}}}
             self.assertEqual(self.client.post(url,json=payload).status_code,403)
             headers = {'X-SISGECE-Evolution-Secret':'t'*40}
             payload['data']['key']['remoteJid']='5585987654322@s.whatsapp.net'
             self.assertEqual(self.client.post(url,json=payload,headers=headers).status_code,200)
             payload['data']['key']['remoteJid']='5585987654321@s.whatsapp.net'
             self.assertEqual(self.client.post(url,json=payload,headers=headers).status_code,200)
-            payload['data']['message']['conversation']='AVALIAR '+survey['codigo']+' 1'
+            payload['data']['message']['listResponseMessage']['singleSelectReply']['selectedRowId']='AVALIAR '+survey['codigo']+' 1'
             self.assertEqual(self.client.post(url,json=payload,headers=headers).status_code,200)
             with self.conn() as conn:
                 self.assertEqual(conn.execute("SELECT nota FROM notificacao_avaliacoes WHERE solicitacao=%s",(sid,)).fetchone()['nota'],4)
