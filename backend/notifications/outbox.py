@@ -65,8 +65,20 @@ def approval_details(notification):
 
 
 def message_text(action, notification=None):
-    """Texto mock/Evolution; não modifica templates Meta aprovados."""
-    content = TEMPLATES[action][1]
+    """Corpo congelado no evento, com variáveis tipadas e complementos institucionais."""
+    original = (notification.get('corpo_personalizado') if notification else None) or TEMPLATES[action][1]
+    values = {
+        'tipo': notification.get('solicitacao_tipo') if notification else '',
+        'data': notification.get('solicitacao_data') if notification else None,
+        'horario': notification.get('solicitacao_horario') if notification else None,
+    }
+    from datetime import date, time
+    safe = {
+        'tipo': values['tipo'] if values['tipo'] in ('Entrada', 'Saída') else '',
+        'data': values['data'].strftime('%d/%m/%Y') if isinstance(values['data'], date) else '',
+        'horario': values['horario'].strftime('%H:%M') if isinstance(values['horario'], time) else '',
+    }
+    content = original.format_map(safe)
     if action == 'recepção':
         if notification and notification.get('solicitacao_tipo') == 'Entrada':
             content += ('\n\nA *entrada foi concluída na recepção*. '
@@ -74,7 +86,9 @@ def message_text(action, notification=None):
         else:
             content += ('\n\nPara saídas, a solicitação seguirá os procedimentos '
                         'institucionais previstos para a liberação pela portaria.')
-    if action == 'aprovar':
+    if action == 'aprovar' and not any(
+        marker in original for marker in ('{tipo}', '{data}', '{horario}')
+    ):
         details = approval_details(notification)
         if details:
             content += '\n\n' + details
@@ -134,16 +148,26 @@ def enqueue_feedback(conn, sid, event_id, action):
 def enqueue(conn, sid, event_id, action):
     if action not in TEMPLATES:
         return
+    # A personalização afeta só a Evolution; Meta continua usando templates aprovados.
+    # A cópia do corpo congela a revisão na fila, independentemente de edições futuras.
+    body = None
+    if os.getenv('NOTIFICATIONS_PROVIDER', 'mock') == 'evolution':
+        setting = conn.execute('SELECT corpo,ativo FROM notificacao_modelos WHERE tipo=%s',
+                               (action,)).fetchone()
+        if setting and not setting['ativo']:
+            return
+        body = setting['corpo'] if setting else TEMPLATES[action][1]
     default_name, _ = TEMPLATES[action]
     name = os.getenv('WHATSAPP_TEMPLATE_' + default_name.removeprefix('sisgece_').upper(), default_name)
     # Configuração inválida não perde a transação: o provedor rejeita antes do HTTP.
     conn.execute('''INSERT INTO notificacoes(solicitacao,evento,assinatura,telefone,
-        provedor,template_tipo,template_nome,template_idioma,status_origem,etapa_origem)
-        SELECT s.id,%s,a.id,s.declarado->>'telefone',a.provedor,%s,%s,%s,s.status,s.etapa
+        provedor,template_tipo,template_nome,template_idioma,status_origem,etapa_origem,
+        corpo_personalizado)
+        SELECT s.id,%s,a.id,s.declarado->>'telefone',a.provedor,%s,%s,%s,s.status,s.etapa,%s
         FROM solicitacoes s JOIN notificacao_assinaturas a ON a.solicitacao=s.id
         WHERE s.id=%s AND a.revogado_em IS NULL
         ON CONFLICT(evento,canal,assinatura) DO NOTHING''',
-        (event_id, action, name, os.getenv('WHATSAPP_TEMPLATE_LANGUAGE','pt_BR'), sid))
+        (event_id, action, name, os.getenv('WHATSAPP_TEMPLATE_LANGUAGE','pt_BR'), body, sid))
     # Uma etapa nova torna avisos ainda não despachados antigos obsoletos.
     conn.execute('''UPDATE notificacoes SET estado='cancelled',resultado='superseded'
         WHERE solicitacao=%s AND evento<%s AND (estado='pending' OR
