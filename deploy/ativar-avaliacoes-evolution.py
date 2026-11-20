@@ -199,8 +199,6 @@ def verify_settings():
                and p.get("HostPort") == "18081"
                for p in (ports.get("3000/tcp") or [])),
            "Porta do SISGECE não corresponde à produção.")
-    ensure(connected(app_container, "sisge-net") is False,
-           "Rede inesperada no SISGECE.")
     ensure(connected(app_container, "sisgece-net")
            and connected(app_container, FEEDBACK_NET)
            and connected(evolution_container, FEEDBACK_NET),
@@ -269,6 +267,15 @@ def check_healthy():
 def enable():
     app_env, worker_env, token, instance, key, image, hook_exists = verify_settings()
     print("Pré-verificação concluída: ambientes, redes, credenciais e webhook.")
+    current_app = env_of(get_container(APP))
+    current_worker = env_of(get_container(WORKER))
+    if (hook_exists
+            and current_app.get("EVOLUTION_FEEDBACK_ENABLED") == "1"
+            and current_app.get("EVOLUTION_INSTANCE") == instance
+            and current_worker.get("EVOLUTION_FEEDBACK_ENABLED") == "1"
+            and current_worker.get("EVOLUTION_FEEDBACK_LIST_ENABLED") == "1"):
+        print("Avaliações já estão ativas. Nenhuma alteração necessária.")
+        return
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     backup = HOME / "sisgece-backups" / ("ativacao-avaliacoes-" + timestamp)
@@ -280,6 +287,7 @@ def enable():
         shutil.copy2(EVOLUTION_OVERRIDE, backup / EVOLUTION_OVERRIDE.name)
     previous = f"{APP}-anterior-feedback-{timestamp}"
     worker_was_stopped = False
+    old_app_stopped = False
     old_app_renamed = False
     worker_recreated = False
     compose_env = {**os.environ, "SISGECE_IMAGE": image}
@@ -291,6 +299,7 @@ def enable():
                env=compose_env)
         worker_was_stopped = True
         action("docker", "stop", APP)
+        old_app_stopped = True
         action("docker", "rename", APP, previous)
         old_app_renamed = True
 
@@ -359,6 +368,9 @@ def enable():
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             subprocess.run(["docker", "rename", previous, APP], check=False,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["docker", "start", APP], check=False,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        elif old_app_stopped:
             subprocess.run(["docker", "start", APP], check=False,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if worker_was_stopped:
