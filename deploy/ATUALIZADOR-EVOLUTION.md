@@ -20,6 +20,12 @@ bash ~/atualizar-sisgece.sh --check
 
 O `--check` não altera nenhum serviço. Se falhar, revise a causa antes de executar a atualização.
 
+Se a mudança na `main` for **somente no script de atualização**, basta copiar a versão
+nova com `install`, conferir com `bash -n` e executar `--check`. Não é necessário
+usar `--apply` apenas para atualizar o próprio script: isso também recriaria
+contêineres sem necessidade. O arquivo `~/atualizar-sisgece.sh` é uma cópia
+separada do repositório e não é atualizado apenas com `git pull`.
+
 Para implantar uma alteração **já integrada à `main`**, durante uma janela de manutenção:
 
 ```bash
