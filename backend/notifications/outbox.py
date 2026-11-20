@@ -77,7 +77,7 @@ def full_template(action, body=None):
         parts.append('{detalhes_etapa}')
     if action == 'aprovar':
         parts.append('{detalhes_solicitacao}')
-    if action in ('reprovar', 'recepção', 'portaria'):
+    if action in ('recepção', 'portaria'):
         parts.append('{convite_avaliacao}')
     parts.append(
         'Esta é uma mensagem automática do Sistema de Gerenciamento de Entrada e Saída '
@@ -90,9 +90,10 @@ def invitation_text(action, notification):
     """A instrução e o código são gerados somente para convites autorizados."""
     code = notification.get('avaliacao_codigo') if notification else None
     valid = (
-        (action in ('reprovar', 'portaria') or
-         (action == 'recepção' and notification
-          and notification.get('solicitacao_tipo') == 'Entrada'))
+        ((action == 'recepção' and notification
+          and notification.get('solicitacao_tipo') == 'Entrada')
+         or (action == 'portaria' and notification
+             and notification.get('solicitacao_tipo') == 'Saída'))
         and isinstance(code, str) and re.fullmatch(r'[A-F0-9]{16}', code)
     )
     if not valid:
@@ -189,7 +190,7 @@ def enqueue_feedback(conn, sid, event_id, action):
           AND nota IS NULL AND cancelado_em IS NULL''', (sid, event_id))
     if os.getenv('EVOLUTION_FEEDBACK_ENABLED') != '1':
         return
-    if action not in ('recepção', 'reprovar', 'portaria'):
+    if action not in ('recepção', 'portaria'):
         return
     code = secrets.token_hex(8).upper()
     conn.execute('''INSERT INTO notificacao_avaliacoes
@@ -200,13 +201,12 @@ def enqueue_feedback(conn, sid, event_id, action):
         WHERE n.solicitacao=%s AND n.evento=%s AND n.template_tipo=%s
         AND n.provedor='evolution' AND a.avaliacao_consentida AND a.revogado_em IS NULL
         AND (
-          (%s='reprovar' AND s.status='REPROVADA')
-          OR (%s='recepção' AND s.tipo='Entrada' AND s.status='APROVADA'
+          (%s='recepção' AND s.tipo='Entrada' AND s.status='APROVADA'
               AND s.etapa='entrada concluída')
           OR (%s='portaria' AND s.tipo='Saída' AND s.status='APROVADA' AND s.etapa='saída concluída')
         )
         ON CONFLICT (notificacao) DO NOTHING''',
-        (code,sid,event_id,action,action,action,action))
+        (code,sid,event_id,action,action,action))
 
 
 def enqueue(conn, sid, event_id, action):
