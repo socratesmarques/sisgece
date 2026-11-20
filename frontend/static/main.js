@@ -129,20 +129,15 @@ if ($("pedido")) {
   });
   form.addEventListener("reset", () => form.telefone.setCustomValidity(""));
   bind("pedido", async (body) => {
-    const result = await api("solicitar", body);
+    await api("solicitar", body);
     $("recibo").textContent =
-      ("Solicitação salva. " + (body.tipo === "Entrada" ? "Seu pedido de entrada aguarda análise da coordenação." : "O envio ainda não autoriza a saída.")) + " Guarde seu código.\nCódigo de consulta: " +
-      result.codigo;
-    $("copiar").hidden = false;
-    $("copiar").onclick = () =>
-      run(async () => {
-        await navigator.clipboard.writeText(result.codigo);
-        $("aviso").textContent = "Código copiado.";
-      });
+      "Solicitação enviada com sucesso! O pedido será analisado pela coordenação." +
+      (form.dataset.whatsappAuto === "true"
+        ? " Acompanhe as atualizações do processo pelo WhatsApp no número informado."
+        : "");
     form.reset();
     form.origem.onchange();
     $("recibo").focus();
-    void notificationStatus(result.codigo);
   });
 } else {
   bind("login", async (body) => {
@@ -470,30 +465,6 @@ async function requestHistory(page = 1) {
   }
   pager(el,page,r.mais,requestHistory);
 }
-
-let notificationRequest = 0;
-async function notificationStatus(code) {
-  const version = ++notificationRequest;
-  const el = $("whatsapp-status");
-  el.replaceChildren();
-  try {
-    const state = await api("notificacoes/estado", {codigo: code});
-    if (version !== notificationRequest) return;
-    if (state.estado === "sem autorização") return;
-    node(el, "p", "WhatsApp: " + state.estado + " · " +
-      (state.destinatario === "responsavel" ? "Responsável" : "Solicitante") + " · " + state.telefone);
-    if (state.estado !== "revogada") {
-      button(el, "Revogar notificações", async () => {
-        await api("notificacoes/revogar", {codigo: code});
-        await notificationStatus(code);
-      });
-    }
-  } catch (_) {
-    if (version !== notificationRequest) return;
-    node(el, "p", "Não foi possível consultar o estado das notificações. Guarde seu código para atendimento.");
-  }
-}
-
 
 async function loadRatings() {
   const target = $("avaliacoes-resumo");
