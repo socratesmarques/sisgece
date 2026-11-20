@@ -10,8 +10,9 @@ if ($("login")) {
     });
   bind("filtro", () => list());
   const sections = {pedidos:"area-pedidos",historico:"historico-pedidos",equipe:"admin",mensagens:"mensagens-painel"};
-  for (const [area,panel] of Object.entries(sections)) {
-    $("ver-"+area).onclick = () => run(async () => {
+  // A navegação não deve bloquear enquanto uma busca de outra aba termina.
+  for (const area of Object.keys(sections)) {
+    $("ver-"+area).onclick = async () => {
       if ($("ver-mensagens").getAttribute("aria-pressed") === "true" &&
           area !== "mensagens" && messageIsDirty() &&
           !window.confirm("Descartar alterações não salvas da mensagem?")) return;
@@ -19,10 +20,15 @@ if ($("login")) {
         $(id).hidden = key !== area;
         $("ver-"+key).setAttribute("aria-pressed", String(key === area));
       }
-      if (area === "equipe") await accounts();
-      if (area === "historico") await requestHistory();
-      if (area === "mensagens") await loadMessageModels();
-    });
+      try {
+        if (area === "equipe") await accounts();
+        if (area === "historico") await requestHistory();
+        if (area === "mensagens") await loadMessageModels();
+      } catch (error) {
+        $("aviso").textContent = error.message || "Não foi possível carregar a seção.";
+        $("aviso").focus();
+      }
+    };
   }
   bind("buscar-historico", () => requestHistory());
   $("mensagens-form").onsubmit = e => {e.preventDefault(); run(saveMessageModel);};
