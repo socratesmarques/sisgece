@@ -143,7 +143,9 @@ class MessageEditor(unittest.TestCase):
         self.assertEqual(self.save(versao=-1).status_code, 400)
         self.assertEqual(self.save(texto='<script>alert(1)</script>').status_code, 200)
         # A interface renderiza tudo via textContent, sem inserir HTML.
-        self.assertNotIn('innerHTML', Path('frontend/static/main.js').read_text(encoding='utf8'))
+        for script in ('shared.js', 'public.js', 'staff.js'):
+            with self.subTest(script=script):
+                self.assertNotIn('innerHTML', Path('frontend/static', script).read_text(encoding='utf8'))
 
     def test_save_revision_conflict_restore_and_audit(self):
         with psycopg.connect() as conn:

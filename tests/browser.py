@@ -95,6 +95,8 @@ with sync_playwright() as pw:
     for width, role in [(1280, "Aluno"), (390, "Responsável")]:
         page = browser.new_page(viewport={"width": width, "height": 844})
         page.goto(url)
+        scripts = page.locator("script[src]").evaluate_all("nodes => nodes.map(el => new URL(el.src).pathname)")
+        assert scripts == ["/static/shared.js", "/static/public.js"], scripts
         # Hero logo must decode successfully on desktop and mobile without third-party requests.
         logo = page.locator(".ifce-identity img")
         expect(logo).to_be_visible()
@@ -207,6 +209,8 @@ with sync_playwright() as pw:
     for width, role in zip((1280, 390, 390), roles):
         page = browser.new_page(viewport={"width": width, "height": 844})
         page.goto(url + "/equipe")
+        scripts = page.locator("script[src]").evaluate_all("nodes => nodes.map(el => new URL(el.src).pathname)")
+        assert scripts == ["/static/shared.js", "/static/staff.js"], scripts
         page.get_by_label("Usuário", exact=True).first.fill(
             str(roles.index(role)) + suffix
         )
@@ -385,6 +389,26 @@ with sync_playwright() as pw:
                 staff.keyboard.press("Escape")
                 expect(staff.locator("#editor")).not_to_be_visible()
                 staff.get_by_role("button", name="Solicitações", exact=True).click()
+        if role == "superusuário":
+            # Regressão: trocar de seção enquanto o histórico ainda está carregando.
+            staff.evaluate("""() => {
+                const originalFetch = window.fetch.bind(window);
+                const waitHistory = new Promise(resolve => {
+                    window.releaseHistoryNavigationTest = resolve;
+                });
+                window.fetch = (...args) => {
+                    if (String(args[0]).startsWith("/api/historico?"))
+                        return waitHistory.then(() => originalFetch(...args));
+                    return originalFetch(...args);
+                };
+            }""")
+            staff.get_by_role("button", name="Histórico", exact=True).click()
+            expect(staff.locator("#historico-pedidos")).to_be_visible()
+            staff.get_by_role("button", name="Funcionários", exact=True).click()
+            expect(staff.locator("#admin")).to_be_visible()
+            expect(staff.locator("#ver-equipe")).to_have_attribute("aria-pressed", "true")
+            staff.evaluate("window.releaseHistoryNavigationTest()")
+            expect(staff.locator("#admin")).to_be_visible()
         staff.close()
     for width in (390, 768, 1024, 1440):
         page = new_page(viewport={"width": width, "height": 900})

@@ -25,6 +25,11 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 
 ROOT = Path(__file__).resolve().parents[1]
+# Fingerprints do conteúdo evitam cache antigo após uma atualização.
+STATIC_ASSET_VERSIONS = {
+    name: hashlib.sha256((ROOT / "frontend/static" / name).read_bytes()).hexdigest()[:12]
+    for name in ("main.css", "shared.js", "public.js", "staff.js")
+}
 app = Flask(
     __name__,
     template_folder=ROOT / "frontend/templates",
@@ -55,7 +60,14 @@ def finish(response):
     cache_control = "no-store"
     if request.endpoint == "static":
         cache_control = "public, max-age=0, must-revalidate"
-        if request.path == "/static/img/ifce-logo.374f13b.png":
+        filename = (request.view_args or {}).get("filename", "")
+        version = STATIC_ASSET_VERSIONS.get(filename)
+        is_versioned = (
+            version is not None
+            and request.args.getlist("v") == [version]
+            and len(request.args) == 1
+        )
+        if (request.path == "/static/img/ifce-logo.374f13b.png" or is_versioned) and response.status_code in (200, 304):
             cache_control = "public, max-age=31536000, immutable"
     response.headers.update(
         {
@@ -204,7 +216,8 @@ def home():
     return render_template("home.html", equipe=request.path == "/equipe",
                            whatsapp_consent_version=CONSENT_VERSION,
                            whatsapp_consent_text=CONSENT_TEXT,
-                            whatsapp_auto_mode=automatic_notifications_enabled())
+                           assets=STATIC_ASSET_VERSIONS,
+                           whatsapp_auto_mode=automatic_notifications_enabled())
 
 
 @app.get("/api/ready")
