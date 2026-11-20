@@ -54,10 +54,20 @@
         <span id="mensagens-situacao" class="message-pill"></span>
       </div>
       <form id="mensagens-form">
-        <label for="mensagens-texto">Conteúdo da mensagem
-          <textarea id="mensagens-texto" name="texto" rows="8" minlength="10" maxlength="1500" required spellcheck="true"></textarea>
+        <label for="mensagens-texto">Mensagem completa (abertura, conteúdo e assinatura)
+          <textarea id="mensagens-texto" name="texto" rows="12" minlength="10" maxlength="1500" required spellcheck="true"></textarea>
         </label>
-        <div class="message-character"><span>Marcadores permitidos: <code>{tipo}</code> <code>{data}</code> <code>{horario}</code></span><span id="mensagens-contador">0 / 1500</span></div>
+        <p class="message-editor-hint">Todo o texto acima pode ser alterado ou removido. Nenhum cabeçalho ou rodapé será acrescentado automaticamente. Os marcadores abaixo inserem informações apenas quando disponíveis.</p>
+        <div class="message-insert-tools" aria-label="Inserir marcador automático">
+          <span>Inserir marcador:</span>
+          <button type="button" data-message-token="tipo">{tipo}</button>
+          <button type="button" data-message-token="data">{data}</button>
+          <button type="button" data-message-token="horario">{horario}</button>
+          <button type="button" data-message-token="detalhes_solicitacao">{detalhes_solicitacao}</button>
+          <button type="button" data-message-token="detalhes_etapa">{detalhes_etapa}</button>
+          <button type="button" data-message-token="convite_avaliacao">{convite_avaliacao}</button>
+        </div>
+        <div class="message-character"><span>Use os marcadores no local em que desejar que apareçam as informações.</span><span id="mensagens-contador">0 / 1500</span></div>
         <label class="message-toggle" for="mensagens-ativo">
           <input id="mensagens-ativo" type="checkbox" checked>
           <span><strong>Mensagem ativada</strong><small>Desativar impede novos avisos desta etapa; envios já na fila não são cancelados.</small></span>
@@ -71,9 +81,9 @@
       <div class="message-preview-section">
         <div class="message-preview-heading">
           <div><h3>Pré-visualização</h3><small>Exemplo demonstrativo; nenhuma mensagem é enviada.</small></div>
-          <label for="mensagens-movimentacao">Simular
+          <div class="message-preview-controls"><label for="mensagens-movimentacao">Simular movimentação
             <select id="mensagens-movimentacao"><option>Entrada</option><option>Saída</option></select>
-          </label>
+          </label><label class="message-preview-feedback"><input type="checkbox" id="mensagens-simular-avaliacao"> Simular convite de avaliação</label></div>
         </div>
         <div class="message-phone">
           <div class="message-phone-top"><span class="message-phone-avatar">S</span><span><strong>SISGECE</strong><small>WhatsApp · exemplo</small></span></div>

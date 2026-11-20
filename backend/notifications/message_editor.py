@@ -8,9 +8,21 @@ from string import Formatter
 
 from flask import abort, g, request
 
-from .outbox import TEMPLATES, message_text
+from .outbox import TEMPLATES, full_template, message_text
 
-TOKENS = ('tipo', 'data', 'horario')
+TOKENS = ('tipo', 'data', 'horario', 'detalhes_etapa',
+          'detalhes_solicitacao', 'convite_avaliacao')
+
+
+def valid_tokens(action):
+    tokens = {'tipo', 'data', 'horario'}
+    if action == 'aprovar':
+        tokens.add('detalhes_solicitacao')
+    if action == 'recepção':
+        tokens.add('detalhes_etapa')
+    if action in ('reprovar', 'recepção', 'portaria'):
+        tokens.add('convite_avaliacao')
+    return tokens
 TITLES = {
     'cadastro': 'Solicitação recebida',
     'aprovar': 'Solicitação aprovada',
@@ -25,32 +37,36 @@ MAX_TEXT = 1500
 MIN_TEXT = 10
 
 
-def validate_body(body):
+def validate_body(body, action=None):
     if not isinstance(body, str):
         raise ValueError('Informe o texto da mensagem.')
     body = body.replace('\r\n', '\n').strip()
     if not MIN_TEXT <= len(body) <= MAX_TEXT or '\x00' in body or '\r' in body:
         raise ValueError('O texto deve ter de 10 a 1500 caracteres.')
+    allowed = valid_tokens(action) if action is not None else set(TOKENS)
     try:
         for _, token, format_spec, conversion in Formatter().parse(body):
-            if token is not None and (token not in TOKENS or format_spec or conversion):
-                raise ValueError('Use apenas {tipo}, {data} e {horario}.')
+            if token is not None and (token not in allowed or format_spec or conversion):
+                raise ValueError('Marcador não permitido para esta mensagem.')
     except ValueError as error:
-        raise ValueError('Marcador inválido. Use apenas {tipo}, {data} e {horario}.') from error
+        raise ValueError('Marcador inválido. Consulte os marcadores permitidos.') from error
     return body
 
 
 def current_model(conn, action):
-    row = conn.execute('''SELECT corpo, ativo, versao, alterado_em
+    row = conn.execute('''SELECT corpo, ativo, versao, alterado_em, mensagem_completa
         FROM notificacao_modelos WHERE tipo=%s''', (action,)).fetchone()
+    full_text = (row['corpo'] if row and row['mensagem_completa'] else
+                 full_template(action, row['corpo']) if row else full_template(action))
     return {
         'tipo': action,
         'titulo': TITLES[action],
-        'texto': row['corpo'] if row else TEMPLATES[action][1],
-        'padrao': TEMPLATES[action][1],
+        'texto': full_text,
+        'padrao': full_template(action),
         'ativo': row['ativo'] if row else True,
         'versao': row['versao'] if row else 0,
-        'personalizado': bool(row and row['corpo'] != TEMPLATES[action][1]),
+        'personalizado': bool(row and full_text != full_template(action)),
+        'legado': bool(row and not row['mensagem_completa']),
         'alterado_em': row['alterado_em'].isoformat() if row else None,
     }
 
@@ -71,13 +87,18 @@ def register(app, db, staff, event):
         if not isinstance(action, str) or action not in TEMPLATES:
             abort(400, 'Evento inválido.')
         try:
-            body = validate_body(payload.get('texto'))
+            body = validate_body(payload.get('texto'), action)
         except ValueError as error:
             abort(400, str(error))
         movement = payload.get('movimentacao', 'Entrada')
         if movement not in ('Entrada', 'Saída'):
             abort(400, 'Movimentação inválida.')
+        simulate_feedback = payload.get('simular_avaliacao', False)
+        if type(simulate_feedback) is not bool:
+            abort(400, 'Opção de simulação inválida.')
         sample = {
+            'mensagem_completa': True,
+            'avaliacao_codigo': '1234567890ABCDEF' if simulate_feedback else None,
             'corpo_personalizado': body,
             'solicitacao_tipo': movement,
             'solicitacao_data': date(2030, 1, 21),
@@ -91,7 +112,7 @@ def register(app, db, staff, event):
         action = request.args.get('tipo')
         if not isinstance(action, str) or action not in TEMPLATES:
             abort(400, 'Evento inválido.')
-        rows = db().execute('''SELECT h.versao, h.corpo, h.ativo, h.acao, h.quando,
+        rows = db().execute('''SELECT h.versao, h.corpo, h.ativo, h.acao, h.quando, h.mensagem_completa,
                 a.nome AS autor
             FROM notificacao_modelos_historico h
             JOIN administradores a ON a.id=h.autor
@@ -99,6 +120,7 @@ def register(app, db, staff, event):
         return {'itens': [{
             'versao': row['versao'],
             'texto': row['corpo'],
+            'completa': row['mensagem_completa'],
             'ativo': row['ativo'],
             'acao': row['acao'],
             'quando': row['quando'].isoformat(),
@@ -119,10 +141,10 @@ def register(app, db, staff, event):
         if operation not in ('salvar', 'restaurar'):
             abort(400, 'Ação inválida.')
         if operation == 'restaurar':
-            body, enabled = TEMPLATES[action][1], True
+            body, enabled = full_template(action), True
         else:
             try:
-                body = validate_body(payload.get('texto'))
+                body = validate_body(payload.get('texto'), action)
             except ValueError as error:
                 abort(400, str(error))
             enabled = payload.get('ativo')
@@ -138,14 +160,15 @@ def register(app, db, staff, event):
         if current != version:
             abort(409, 'Esta mensagem foi alterada por outro administrador. Recarregue antes de salvar.')
         revision = current + 1
-        conn.execute('''INSERT INTO notificacao_modelos (tipo,corpo,ativo,versao,alterado_por)
-            VALUES (%s,%s,%s,%s,%s)
+        conn.execute('''INSERT INTO notificacao_modelos (tipo,corpo,ativo,versao,alterado_por,mensagem_completa)
+            VALUES (%s,%s,%s,%s,%s,true)
             ON CONFLICT(tipo) DO UPDATE SET corpo=excluded.corpo,
                 ativo=excluded.ativo, versao=excluded.versao,
+                mensagem_completa=true,
                 alterado_por=excluded.alterado_por,alterado_em=clock_timestamp()''',
             (action, body, enabled, revision,  g.user['id']))
         conn.execute('''INSERT INTO notificacao_modelos_historico
-            (tipo,versao,corpo,ativo,acao,autor) VALUES (%s,%s,%s,%s,%s,%s)''',
+            (tipo,versao,corpo,ativo,acao,autor,mensagem_completa) VALUES (%s,%s,%s,%s,%s,%s,true)''',
             (action, revision, body, enabled, operation, g.user['id']))
         event('Edição de mensagem WhatsApp', note=f'{action} · versão {revision} · {operation} · ' +
               ('ativa' if enabled else 'desativada'))

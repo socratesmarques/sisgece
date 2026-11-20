@@ -64,8 +64,86 @@ def approval_details(notification):
             f'Horário: {hour:%H:%M}')
 
 
+
+def full_template(action, body=None):
+    """Modelo integral editável pelo superusuário, inclusive abertura e assinatura.
+
+    Os blocos condicionais são inseridos apenas se o editor mantiver seu marcador.
+    """
+    if action not in TEMPLATES:
+        raise KeyError(action)
+    parts = [HEADER, TEMPLATES[action][1] if body is None else body]
+    if action == 'recepção':
+        parts.append('{detalhes_etapa}')
+    if action == 'aprovar':
+        parts.append('{detalhes_solicitacao}')
+    if action in ('reprovar', 'recepção', 'portaria'):
+        parts.append('{convite_avaliacao}')
+    parts.append(
+        'Esta é uma mensagem automática do Sistema de Gerenciamento de Entrada e Saída '
+        'de Estudantes.' if action == 'cadastro' else FOOTER
+    )
+    return '\n\n'.join(parts)
+
+
+def invitation_text(action, notification):
+    """A instrução e o código são gerados somente para convites autorizados."""
+    code = notification.get('avaliacao_codigo') if notification else None
+    valid = (
+        (action in ('reprovar', 'portaria') or
+         (action == 'recepção' and notification
+          and notification.get('solicitacao_tipo') == 'Entrada'))
+        and isinstance(code, str) and re.fullmatch(r'[A-F0-9]{16}', code)
+    )
+    if not valid:
+        return ''
+    return (
+        '*Avaliação opcional do SISGECE*\n'
+        'Como você avalia o atendimento recebido? '
+        'Escolha uma nota de 1 (muito ruim) a 5 (excelente).\n'
+        f'Para avaliar, responda exatamente: AVALIAR {code} 5\n'
+        'Substitua o último número pela nota desejada. '
+        'Você pode ignorar este convite.'
+    )
+
+
+def render_full_message(action, template, notification=None):
+    """Expande exclusivamente marcadores previamente validados, sem dados privados."""
+    from datetime import date, time
+    item = notification or {}
+    kind = item.get('solicitacao_tipo')
+    day = item.get('solicitacao_data')
+    hour = item.get('solicitacao_horario')
+    kind = kind if kind in ('Entrada', 'Saída') else ''
+    safe = {
+        'tipo': kind,
+        'data': day.strftime('%d/%m/%Y') if isinstance(day, date) else '',
+        'horario': hour.strftime('%H:%M') if isinstance(hour, time) else '',
+        'detalhes_solicitacao': approval_details(item) if action == 'aprovar' else '',
+        'detalhes_etapa': (
+            'A *entrada foi concluída na recepção*. '
+            'Não há etapa de portaria para solicitações de entrada.'
+            if kind == 'Entrada' else
+            'Para saídas, a solicitação seguirá os procedimentos '
+            'institucionais previstos para a liberação pela portaria.'
+            if kind == 'Saída' else ''
+        ) if action == 'recepção' else '',
+        'convite_avaliacao': invitation_text(action, item),
+    }
+    # Marcadores estritos, validados antes de salvar; nenhum campo SQL arbitrário.
+    rendered = template.format_map(safe)
+    return re.sub(r'\n{3,}', '\n\n', rendered).strip()
+
+
 def message_text(action, notification=None):
-    """Corpo congelado no evento, com variáveis tipadas e complementos institucionais."""
+    """Compatibiliza a fila legada com mensagens integrais novas da Evolution."""
+    if notification and notification.get('mensagem_completa') is True:
+        source = notification.get('corpo_personalizado')
+        if isinstance(source, str) and source.strip():
+            return render_full_message(action, source, notification)
+
+    # Caminho legado: preserva exatamente a composição de notificações antigas
+    # (inclusive aquelas que já estavam na fila antes da migração 012.sql).
     original = (notification.get('corpo_personalizado') if notification else None) or TEMPLATES[action][1]
     values = {
         'tipo': notification.get('solicitacao_tipo') if notification else '',
@@ -92,27 +170,13 @@ def message_text(action, notification=None):
         details = approval_details(notification)
         if details:
             content += '\n\n' + details
-    code = notification.get('avaliacao_codigo') if notification else None
-    invitation = bool(
-        (action in ('reprovar', 'portaria')
-         or (action == 'recepção' and notification
-             and notification.get('solicitacao_tipo') == 'Entrada'))
-        and isinstance(code, str)
-        and re.fullmatch(r'[A-F0-9]{16}', code)
-    )
-    if invitation:
-        content += (
-            '\n\n*Avaliação opcional do SISGECE*\n'
-            'Como você avalia o atendimento recebido? '
-            'Escolha uma nota de 1 (muito ruim) a 5 (excelente).\n'
-            f'Para avaliar, responda exatamente: AVALIAR {code} 5\n'
-            'Substitua o último número pela nota desejada. '
-            'Você pode ignorar este convite.'
-        )
+    invite = invitation_text(action, notification)
+    if invite:
+        content += '\n\n' + invite
     footer = ('Esta é uma mensagem automática do Sistema de Gerenciamento de Entrada e Saída '
               'de Estudantes.' if action == 'cadastro' else
               'Esta é uma mensagem automática. Sua resposta será registrada apenas se você optar por avaliar.'
-              if invitation else FOOTER)
+              if invite else FOOTER)
     return f'{HEADER}\n\n{content}\n\n{footer}'
 
 
@@ -151,23 +215,31 @@ def enqueue(conn, sid, event_id, action):
     # A personalização afeta só a Evolution; Meta continua usando templates aprovados.
     # A cópia do corpo congela a revisão na fila, independentemente de edições futuras.
     body = None
+    complete = False
     if os.getenv('NOTIFICATIONS_PROVIDER', 'mock') == 'evolution':
-        setting = conn.execute('SELECT corpo,ativo FROM notificacao_modelos WHERE tipo=%s',
-                               (action,)).fetchone()
+        setting = conn.execute(
+            'SELECT corpo,ativo,mensagem_completa FROM notificacao_modelos WHERE tipo=%s',
+            (action,)
+        ).fetchone()
         if setting and not setting['ativo']:
             return
-        body = setting['corpo'] if setting else TEMPLATES[action][1]
+        if setting:
+            body = setting['corpo']
+            complete = setting['mensagem_completa']
+        else:
+            body = full_template(action)
+            complete = True
     default_name, _ = TEMPLATES[action]
     name = os.getenv('WHATSAPP_TEMPLATE_' + default_name.removeprefix('sisgece_').upper(), default_name)
     # Configuração inválida não perde a transação: o provedor rejeita antes do HTTP.
     conn.execute('''INSERT INTO notificacoes(solicitacao,evento,assinatura,telefone,
         provedor,template_tipo,template_nome,template_idioma,status_origem,etapa_origem,
-        corpo_personalizado)
-        SELECT s.id,%s,a.id,s.declarado->>'telefone',a.provedor,%s,%s,%s,s.status,s.etapa,%s
+        corpo_personalizado,mensagem_completa)
+        SELECT s.id,%s,a.id,s.declarado->>'telefone',a.provedor,%s,%s,%s,s.status,s.etapa,%s,%s
         FROM solicitacoes s JOIN notificacao_assinaturas a ON a.solicitacao=s.id
         WHERE s.id=%s AND a.revogado_em IS NULL
         ON CONFLICT(evento,canal,assinatura) DO NOTHING''',
-        (event_id, action, name, os.getenv('WHATSAPP_TEMPLATE_LANGUAGE','pt_BR'), body, sid))
+        (event_id, action, name, os.getenv('WHATSAPP_TEMPLATE_LANGUAGE','pt_BR'), body, complete, sid))
     # Uma etapa nova torna avisos ainda não despachados antigos obsoletos.
     conn.execute('''UPDATE notificacoes SET estado='cancelled',resultado='superseded'
         WHERE solicitacao=%s AND evento<%s AND (estado='pending' OR

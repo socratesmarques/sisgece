@@ -173,6 +173,10 @@ if ($("pedido")) {
   $("mensagens-texto").addEventListener("input", () => {updateMessageDirty(); scheduleMessagePreview();});
   $("mensagens-ativo").onchange = updateMessageDirty;
   $("mensagens-movimentacao").onchange = scheduleMessagePreview;
+  $("mensagens-simular-avaliacao").onchange = scheduleMessagePreview;
+  for (const control of document.querySelectorAll("[data-message-token]")) {
+    control.onclick = () => insertMessageToken(control.dataset.messageToken);
+  }
   $("adicionar").onclick = () => editAccount();
   $("cancelar").onclick = () => $("editor").close();
   $("conta").elements.perfil.onchange = roleHelp;
@@ -503,6 +507,30 @@ let selectedMessage = null;
 let messagePreviewTimer = null;
 let messagePreviewVersion = 0;
 
+function insertMessageToken(token) {
+  const input = $("mensagens-texto");
+  const marker = "{" + token + "}";
+  const start = input.selectionStart, end = input.selectionEnd;
+  if (input.value.length - (end - start) + marker.length > input.maxLength) return;
+  input.setRangeText(marker, start, end, "end");
+  input.focus();
+  updateMessageDirty();
+  scheduleMessagePreview();
+}
+function updateMessageTokens() {
+  const kind = selectedMessage;
+  const allowed = new Set(["tipo", "data", "horario"]);
+  if (kind === "aprovar") allowed.add("detalhes_solicitacao");
+  if (kind === "recepção") allowed.add("detalhes_etapa");
+  if (["reprovar", "recepção", "portaria"].includes(kind)) allowed.add("convite_avaliacao");
+  for (const control of document.querySelectorAll("[data-message-token]")) {
+    control.hidden = !allowed.has(control.dataset.messageToken);
+  }
+  $("mensagens-simular-avaliacao").checked = false;
+  $("mensagens-simular-avaliacao").closest("label").hidden =
+    !allowed.has("convite_avaliacao");
+}
+
 function selectedMessageModel() {
   return messageModels.find(item => item.tipo === selectedMessage);
 }
@@ -545,11 +573,12 @@ async function selectMessageModel(type) {
   if (!item) return;
   selectedMessage = type;
   $("mensagens-titulo").textContent = item.titulo;
+  updateMessageTokens();
   $("mensagens-texto").value = item.texto;
   $("mensagens-ativo").checked = item.ativo;
   $("mensagens-restaurar").disabled = !item.personalizado && item.ativo;
   $("mensagens-subtitulo").textContent =
-    "Alterações aplicadas aos próximos eventos. Mensagens na fila mantêm a versão anterior.";
+    "Edite a mensagem inteira. As alterações valem para novos eventos; a fila mantém os textos anteriores.";
   drawMessageList();
   updateMessageDirty();
   scheduleMessagePreview();
@@ -571,6 +600,7 @@ function scheduleMessagePreview() {
       const response = await api("notificacoes/modelos/prever", {
         tipo: type, texto: $("mensagens-texto").value,
         movimentacao: $("mensagens-movimentacao").value,
+        simular_avaliacao: $("mensagens-simular-avaliacao").checked,
       });
       if (revision !== messagePreviewVersion) return;
       $("mensagens-previsao").textContent = response.texto;
@@ -627,7 +657,8 @@ async function loadMessageHistory(type) {
       node(summary, "span", (item.acao === "restaurar" ? "Restaurada" : "Alterada") +
         " · " + (item.ativo ? "Ativa" : "Pausada"));
       node(details, "small", item.autor + " · " +
-        new Date(item.quando).toLocaleString("pt-BR", {dateStyle:"short",timeStyle:"short"}));
+        new Date(item.quando).toLocaleString("pt-BR", {dateStyle:"short",timeStyle:"short"}) +
+        (item.completa ? " · Texto integral" : " · Texto do formato anterior"));
       node(details, "pre", item.texto);
     }
   } catch (_) {
