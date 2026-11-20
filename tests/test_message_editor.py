@@ -16,7 +16,7 @@ from werkzeug.security import generate_password_hash
 from backend.app import app
 from backend.manage import migrate
 from backend.notifications.message_editor import validate_body
-from backend.notifications.outbox import TEMPLATES, message_text
+from backend.notifications.outbox import TEMPLATES, full_template, message_text
 
 
 class MessageEditor(unittest.TestCase):
@@ -89,18 +89,35 @@ class MessageEditor(unittest.TestCase):
         result = self.admin.get('/api/notificacoes/modelos')
         self.assertEqual(result.status_code, 200)
         self.assertEqual(len(result.json['itens']), 8)
-        self.assertEqual(result.json['marcadores'], ['tipo', 'data', 'horario'])
+        self.assertEqual(result.json['marcadores'], ['tipo', 'data', 'horario',
+                'detalhes_etapa', 'detalhes_solicitacao', 'convite_avaliacao'])
         self.assertTrue(all(row['versao'] == 0 and row['ativo'] for row in result.json['itens']))
+        self.assertTrue(all(row['texto'].startswith('*SISGECE') for row in result.json['itens']))
+        self.assertTrue(all('mensagem automática' in row['texto'] for row in result.json['itens']))
         preview = self.post(self.admin, 'notificacoes/modelos/prever', {
             'tipo': 'recepção', 'texto': 'O pedido de {tipo} em {data} às {horario} foi processado.',
             'movimentacao': 'Entrada',
         })
         self.assertEqual(preview.status_code, 200)
         msg = preview.json['texto']
-        for part in ('Entrada', '21/01/2030', '14:30', 'entrada foi concluída na recepção',
-                     'SISGECE'):
-            self.assertIn(part, msg)
-        self.assertNotIn('Portaria ·', msg)
+        self.assertEqual(msg, 'O pedido de Entrada em 21/01/2030 às 14:30 foi processado.')
+        self.assertNotIn('SISGECE', msg)  # Sem cabeçalho/rodapé implícitos.
+        with_details = self.post(self.admin, 'notificacoes/modelos/prever', {
+            'tipo': 'recepção',
+            'texto': 'Recepção: {detalhes_etapa}\n\n{convite_avaliacao}',
+            'movimentacao': 'Entrada',
+            'simular_avaliacao': True,
+        })
+        self.assertEqual(with_details.status_code, 200)
+        self.assertIn('entrada foi concluída na recepção', with_details.json['texto'])
+        self.assertIn('AVALIAR 1234567890ABCDEF 5', with_details.json['texto'])
+        without_invite = self.post(self.admin, 'notificacoes/modelos/prever', {
+            'tipo': 'recepção',
+            'texto': 'Recepção: {detalhes_etapa}\n\n{convite_avaliacao}',
+            'movimentacao': 'Saída',
+            'simular_avaliacao': True,
+        })
+        self.assertNotIn('AVALIAR', without_invite.json['texto'])
         self.assertEqual(self.post(self.admin, 'notificacoes/modelos/prever', {
             'tipo':'recepção', 'texto':'Simulação de {tipo}.', 'movimentacao':'Indefinida',
         }).status_code, 400)
@@ -117,6 +134,8 @@ class MessageEditor(unittest.TestCase):
                     validate_body(body)
                 self.assertEqual(self.save(texto=body).status_code, 400)
         self.assertEqual(self.save(ativo='true').status_code, 400)
+        self.assertEqual(self.save(texto='Convite {convite_avaliacao} liberado.').status_code, 400)
+        self.assertEqual(self.save(texto='Detalhes {detalhes_solicitacao} enviados.').status_code, 400)
         self.assertEqual(self.save(versao=True).status_code, 400)
         self.assertEqual(self.save(tipo='evento desconhecido').status_code, 400)
         self.assertEqual(self.save(tipo={}).status_code, 400)
@@ -149,12 +168,13 @@ class MessageEditor(unittest.TestCase):
             'tipo':'cadastro','versao':2,'acao':'restaurar',
         })
         self.assertEqual(restored.status_code, 200)
-        self.assertEqual(restored.json['modelo']['texto'], TEMPLATES['cadastro'][1])
+        self.assertEqual(restored.json['modelo']['texto'], full_template('cadastro'))
         self.assertEqual(restored.json['modelo']['versao'], 3)
         self.assertTrue(restored.json['modelo']['ativo'])
         history = self.admin.get('/api/notificacoes/modelos/historico?tipo=cadastro').json['itens']
         self.assertEqual([h['versao'] for h in history], [3,2,1])
         self.assertEqual(history[0]['acao'], 'restaurar')
+        self.assertTrue(all(h['completa'] for h in history))
         with psycopg.connect() as conn:
             records = conn.execute("SELECT nota FROM eventos WHERE acao='Edição de mensagem WhatsApp'")
             notes = [r[0] for r in records]
@@ -177,6 +197,7 @@ class MessageEditor(unittest.TestCase):
             with psycopg.connect(row_factory=dict_row) as conn:
                 saved = conn.execute("SELECT * FROM notificacoes WHERE provedor='evolution' ORDER BY id DESC LIMIT 1").fetchone()
                 self.assertEqual(saved['corpo_personalizado'], body)
+                self.assertTrue(saved['mensagem_completa'])
                 count = conn.execute("SELECT COUNT(*) AS n FROM notificacoes WHERE provedor='evolution'").fetchone()['n']
             self.assertEqual(self.post(self.admin, 'notificacoes/modelos', {
                 'tipo':'cadastro','versao':1,'texto':'Este evento está temporariamente desligado.',
@@ -190,8 +211,63 @@ class MessageEditor(unittest.TestCase):
                 'solicitacao_data':date(2030,1,21),
                 'solicitacao_horario':time(14,30),
             })
-            self.assertIn('Aviso: o pedido de Entrada foi registrado para 21/01/2030 às 14:30.', delivered)
+            self.assertEqual(delivered, 'Aviso: o pedido de Entrada foi registrado para 21/01/2030 às 14:30.')
+            self.assertNotIn('Esta é uma mensagem automática', delivered)
             self.assertNotIn('temporariamente desligado', delivered)
+
+
+    def test_legacy_text_and_pending_messages_keep_old_format(self):
+        from backend.notifications.outbox import HEADER, FOOTER
+        legacy = {
+            'corpo_personalizado': 'O pedido foi registrado pela coordenação.',
+            'mensagem_completa': False, 'solicitacao_tipo': 'Saída',
+            'solicitacao_data': date(2030, 1, 21),
+            'solicitacao_horario': time(14, 30),
+        }
+        rendered = message_text('aprovar', legacy)
+        self.assertTrue(rendered.startswith(HEADER))
+        self.assertIn('O pedido foi registrado', rendered)
+        self.assertIn('Informações da solicitação', rendered)
+        self.assertTrue(rendered.endswith(FOOTER))
+        with psycopg.connect() as conn:
+            conn.execute("""INSERT INTO notificacao_modelos
+                (tipo,corpo,ativo,versao,alterado_por)
+                VALUES ('aprovar',%s,true,1,(SELECT id FROM administradores WHERE usuario='editor0'))""",
+                (legacy['corpo_personalizado'],))
+        model = self.admin.get('/api/notificacoes/modelos').json['itens'][1]
+        self.assertTrue(model['legado'])
+        self.assertTrue(model['texto'].startswith(HEADER))
+        self.assertIn('O pedido foi registrado', model['texto'])
+        self.assertEqual(self.post(self.admin, 'notificacoes/modelos', {
+            'tipo': 'aprovar', 'versao': 1, 'texto': 'Novo aviso de aprovação completo.',
+            'ativo': True,
+        }).status_code, 200)
+        with psycopg.connect(row_factory=dict_row) as conn:
+            row = conn.execute("SELECT mensagem_completa FROM notificacao_modelos WHERE tipo='aprovar'").fetchone()
+            self.assertTrue(row['mensagem_completa'])
+        self.assertTrue(rendered.startswith(HEADER))  # Mensagens anteriores intactas.
+
+    def test_complete_template_approval_and_evaluation(self):
+        from backend.notifications.outbox import render_full_message
+        sample = {'solicitacao_tipo':'Entrada', 'solicitacao_data':date(2030,1,21),
+                  'solicitacao_horario':time(14,30)}
+        text = render_full_message('aprovar', full_template('aprovar'), sample)
+        self.assertEqual(text.count('*SISGECE | IFCE Campus Maranguape*'), 1)
+        self.assertIn('*Informações da solicitação*', text)
+        self.assertIn('Data: 21/01/2030', text)
+        self.assertIn('Esta é uma mensagem automática', text)
+        custom = render_full_message('aprovar', 'Aprovado: {tipo} às {horario}.', sample)
+        self.assertEqual(custom, 'Aprovado: Entrada às 14:30.')
+        entry = render_full_message('recepção', 'Finalizado: {detalhes_etapa}',
+                                    {'solicitacao_tipo': 'Entrada'})
+        self.assertIn('entrada foi concluída na recepção', entry)
+        self.assertNotIn('portaria para solicitações de saída', entry)
+        no_invite = render_full_message('reprovar', 'Resultado: {convite_avaliacao}',
+                                        {'avaliacao_codigo':'1234567890ABCDEF'})
+        self.assertIn('AVALIAR 1234567890ABCDEF 5', no_invite)
+        malformed = render_full_message('reprovar', 'Resultado: {convite_avaliacao}',
+                                         {'avaliacao_codigo':'invalid'})
+        self.assertEqual(malformed, 'Resultado:')
 
 
 if __name__ == '__main__':
