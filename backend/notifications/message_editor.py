@@ -6,7 +6,7 @@ conservam o corpo capturado no evento. Templates Meta não são afetados.
 from datetime import date, time
 from string import Formatter
 
-from flask import abort, request
+from flask import abort, g, request
 
 from .outbox import TEMPLATES, message_text
 
@@ -143,10 +143,10 @@ def register(app, db, staff, event):
             ON CONFLICT(tipo) DO UPDATE SET corpo=excluded.corpo,
                 ativo=excluded.ativo, versao=excluded.versao,
                 alterado_por=excluded.alterado_por,alterado_em=clock_timestamp()''',
-            (action, body, enabled, revision,  __import__('flask').g.user['id']))
+            (action, body, enabled, revision,  g.user['id']))
         conn.execute('''INSERT INTO notificacao_modelos_historico
             (tipo,versao,corpo,ativo,acao,autor) VALUES (%s,%s,%s,%s,%s,%s)''',
-            (action, revision, body, enabled, operation, __import__('flask').g.user['id']))
+            (action, revision, body, enabled, operation, g.user['id']))
         event('Edição de mensagem WhatsApp', note=f'{action} · versão {revision} · {operation} · ' +
               ('ativa' if enabled else 'desativada'))
         return {'ok': True, 'modelo': current_model(conn, action)}
