@@ -129,15 +129,35 @@ if ($("pedido")) {
   });
   form.addEventListener("reset", () => form.telefone.setCustomValidity(""));
   bind("pedido", async (body) => {
-    await api("solicitar", body);
-    $("recibo").textContent =
-      "Solicitação enviada com sucesso! O pedido será analisado pela coordenação." +
-      (form.dataset.whatsappAuto === "true"
-        ? " Acompanhe as atualizações do processo pelo WhatsApp no número informado."
-        : "");
-    form.reset();
-    form.origem.onchange();
-    $("recibo").focus();
+    const submit = $("enviar-pedido");
+    const status = $("pedido-status");
+    submit.disabled = true;
+    submit.textContent = "Enviando solicitação…";
+    form.setAttribute("aria-busy", "true");
+    status.dataset.state = "loading";
+    status.textContent = "Enviando solicitação…";
+    $("recibo").textContent = "";
+    try {
+      await api("solicitar", body);
+      $("recibo").textContent =
+        "Solicitação enviada com sucesso! O pedido será analisado pela coordenação." +
+        (form.dataset.whatsappAuto === "true"
+          ? " Acompanhe as atualizações do processo pelo WhatsApp no número informado."
+          : "");
+      status.textContent = "";
+      delete status.dataset.state;
+      form.reset();
+      form.origem.onchange();
+      $("recibo").focus();
+    } catch (error) {
+      status.dataset.state = "error";
+      status.textContent = error.message || "Não foi possível enviar a solicitação.";
+      status.focus();
+    } finally {
+      submit.disabled = false;
+      submit.textContent = "Enviar solicitação";
+      form.removeAttribute("aria-busy");
+    }
   });
 } else {
   bind("login", async (body) => {
