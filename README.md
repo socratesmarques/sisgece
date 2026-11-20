@@ -134,4 +134,4 @@ Esses documentos são uma fotografia datada; confirme a branch, o código e o se
 
 ## Mensagens automáticas personalizadas
 
-O superusuário pode editar, pré-visualizar, pausar e restaurar os oito textos enviados via Evolution em **Área do funcionário → Mensagens automáticas**. As alterações valem para novos eventos; notificações já na fila preservam o corpo anterior. O histórico fica no PostgreSQL. Consulte [Editor de mensagens](docs/EDITOR-MENSAGENS.md) para limites, permissões e implantação.
+O superusuário pode editar a **mensagem completa**, incluindo cabeçalho, corpo e assinatura, pré-visualizar, pausar e restaurar os oito avisos enviados via Evolution em **Área do funcionário → Mensagens automáticas**. As alterações valem para novos eventos; notificações já na fila preservam o corpo anterior. O histórico fica no PostgreSQL. Consulte [Editor de mensagens](docs/EDITOR-MENSAGENS.md) para limites, permissões e implantação.
