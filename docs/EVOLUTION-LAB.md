@@ -85,9 +85,5 @@ python -m unittest discover -s tests -v
 ```
 
 A CI também valida o navegador e a imagem Docker. Para interromper os
-envios, pare `sisgece-evolution-worker` e defina
+envios, pare o worker de notificações e defina
 `WHATSAPP_REAL_SEND_ENABLED=0` em seu ambiente antes de recriá-lo.
-Para voltar ao envio de convite **somente por texto**, coloque
-`EVOLUTION_FEEDBACK_LIST_ENABLED=0` no worker e recrie-o.
-Para desligar por completo o convite de avaliação, use
-`EVOLUTION_FEEDBACK_ENABLED=0` em app e worker e desative o webhook.
