@@ -6,3 +6,6 @@ ALTER TABLE notificacao_modelos
 
 ALTER TABLE notificacoes
     ADD COLUMN mensagem_completa boolean NOT NULL DEFAULT false;
+
+ALTER TABLE notificacao_modelos_historico
+    ADD COLUMN mensagem_completa boolean NOT NULL DEFAULT false;
