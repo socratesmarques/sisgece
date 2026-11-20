@@ -133,7 +133,34 @@ def register(app, db, staff):
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
             abort(400)
-        consume(db(), payload)
+        recorded = consume(db(), payload)
+        # Loga apenas a tentativa de avaliação não gravada, sem conteúdo,
+        # número, código, ID de mensagem ou outros dados pessoais.
+        data = payload.get('data')
+        message = data.get('message') if isinstance(data, dict) else None
+        if not recorded and isinstance(message, dict):
+            text = message.get('conversation')
+            extended = message.get('extendedTextMessage')
+            if not isinstance(text, str) and isinstance(extended, dict):
+                text = extended.get('text')
+            candidate = (
+                isinstance(text, str) and text.strip().upper().startswith('AVALIAR ')
+                or any(kind in message for kind in (
+                    'listResponseMessage', 'buttonsResponseMessage',
+                    'templateButtonReplyMessage', 'interactiveResponseMessage'
+                ))
+            )
+            if candidate:
+                key = data.get('key')
+                jid = key.get('remoteJid') if isinstance(key, dict) else None
+                kind = ('lid' if isinstance(jid, str) and jid.endswith('@lid')
+                        else 'phone' if isinstance(jid, str)
+                        and jid.endswith('@s.whatsapp.net') else 'other')
+                alt = key.get('remoteJidAlt') if isinstance(key, dict) else None
+                app.logger.warning(
+                    'evolution_feedback candidate_ignored jid_kind=%s alt_phone=%s',
+                    kind, bool(isinstance(alt, str) and PHONE_JID.fullmatch(alt))
+                )
         # Não retorna se o telefone/código existe, evita enumeração.
         return {'ok': True}
 
