@@ -13,6 +13,33 @@ PATH = '/api/notificacoes/evolution/avaliacao'
 RATING = re.compile(r'AVALIAR ([A-F0-9]{16}) ([1-5])')
 
 
+PHONE_JID = re.compile(r'[1-9][0-9]{7,14}@s\.whatsapp\.net')
+LID_JID = re.compile(r'[1-9][0-9]{7,20}@lid')
+
+
+def sender_phone(key):
+    """Resolve o número do remetente Evolution quando remoteJid é @lid.
+
+    remoteJidAlt só é usado quando remoteJid é um LID individual.
+    Sem um número real válido, a nota não pode ser vinculada ao pedido.
+    """
+    jid = key.get('remoteJid')
+    if not isinstance(jid, str):
+        return None
+    if PHONE_JID.fullmatch(jid):
+        phone_jid = jid
+    elif LID_JID.fullmatch(jid):
+        phone_jid = key.get('remoteJidAlt')
+        if not isinstance(phone_jid, str) or not PHONE_JID.fullmatch(phone_jid):
+            return None
+    else:
+        return None
+    try:
+        return normalize_phone('+' + phone_jid.split('@', 1)[0])
+    except ValueError:
+        return None
+
+
 def extract_rating(payload):
     """Ignora saídas próprias, grupos, mídia e qualquer texto fora do comando."""
     if not isinstance(payload, dict) or payload.get('event') != 'messages.upsert':
@@ -25,11 +52,9 @@ def extract_rating(payload):
     key = data.get('key')
     if not isinstance(key, dict) or key.get('fromMe') is not False:
         return None
-    jid = key.get('remoteJid')
+    phone = sender_phone(key)
     mid = key.get('id')
-    if not isinstance(jid, str) or not re.fullmatch(r'[1-9][0-9]{7,14}@s\.whatsapp\.net', jid):
-        return None
-    if not isinstance(mid, str) or not 1 <= len(mid) <= 512:
+    if phone is None or not isinstance(mid, str) or not 1 <= len(mid) <= 512:
         return None
     message = data.get('message')
     if not isinstance(message, dict):
@@ -64,10 +89,6 @@ def extract_rating(payload):
         return None
     matched = RATING.fullmatch(body.strip().upper())
     if not matched:
-        return None
-    try:
-        phone = normalize_phone('+' + jid.split('@', 1)[0])
-    except ValueError:
         return None
     return phone, matched.group(1), int(matched.group(2)), hashlib.sha256(mid.encode()).hexdigest()
 
@@ -112,7 +133,34 @@ def register(app, db, staff):
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
             abort(400)
-        consume(db(), payload)
+        recorded = consume(db(), payload)
+        # Loga apenas a tentativa de avaliação não gravada, sem conteúdo,
+        # número, código, ID de mensagem ou outros dados pessoais.
+        data = payload.get('data')
+        message = data.get('message') if isinstance(data, dict) else None
+        if not recorded and isinstance(message, dict):
+            text = message.get('conversation')
+            extended = message.get('extendedTextMessage')
+            if not isinstance(text, str) and isinstance(extended, dict):
+                text = extended.get('text')
+            candidate = (
+                isinstance(text, str) and text.strip().upper().startswith('AVALIAR ')
+                or any(kind in message for kind in (
+                    'listResponseMessage', 'buttonsResponseMessage',
+                    'templateButtonReplyMessage', 'interactiveResponseMessage'
+                ))
+            )
+            if candidate:
+                key = data.get('key')
+                jid = key.get('remoteJid') if isinstance(key, dict) else None
+                kind = ('lid' if isinstance(jid, str) and jid.endswith('@lid')
+                        else 'phone' if isinstance(jid, str)
+                        and jid.endswith('@s.whatsapp.net') else 'other')
+                alt = key.get('remoteJidAlt') if isinstance(key, dict) else None
+                app.logger.warning(
+                    'evolution_feedback candidate_ignored jid_kind=%s alt_phone=%s',
+                    kind, bool(isinstance(alt, str) and PHONE_JID.fullmatch(alt))
+                )
         # Não retorna se o telefone/código existe, evita enumeração.
         return {'ok': True}
 
