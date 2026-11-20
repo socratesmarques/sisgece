@@ -28,7 +28,7 @@ class HeroAssetTests(unittest.TestCase):
         response = self.client.get(IMAGE_URL)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.mimetype, "image/png")
-        self.assertTrue(response.data.startswith(b"\\x89PNG\\r\\n\\x1a\\n"))
+        self.assertTrue(response.data.startswith(b"\x89PNG\r\n\x1a\n"))
         self.assertLess(len(response.data), 40_000)
         self.assertEqual(
             response.headers["Cache-Control"], "public, max-age=31536000, immutable"
