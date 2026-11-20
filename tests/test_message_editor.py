@@ -6,6 +6,7 @@ import os
 import secrets
 import unittest
 from datetime import date, time
+from pathlib import Path
 from unittest.mock import patch
 
 import psycopg
@@ -123,9 +124,13 @@ class MessageEditor(unittest.TestCase):
         self.assertEqual(self.save(versao=-1).status_code, 400)
         self.assertEqual(self.save(texto='<script>alert(1)</script>').status_code, 200)
         # A interface renderiza tudo via textContent, sem inserir HTML.
-        self.assertNotIn('innerHTML', open('frontend/static/main.js',encoding='utf8').read())
+        self.assertNotIn('innerHTML', Path('frontend/static/main.js').read_text(encoding='utf8'))
 
     def test_save_revision_conflict_restore_and_audit(self):
+        with psycopg.connect() as conn:
+            count_before = conn.execute(
+                "SELECT count(*) FROM eventos WHERE acao='Edição de mensagem WhatsApp'"
+            ).fetchone()[0]
         saved = self.save(texto='Olá! Seu pedido de {tipo} foi recebido.')
         self.assertEqual(saved.status_code, 200)
         self.assertEqual(saved.json['modelo']['versao'], 1)
@@ -153,7 +158,7 @@ class MessageEditor(unittest.TestCase):
         with psycopg.connect() as conn:
             records = conn.execute("SELECT nota FROM eventos WHERE acao='Edição de mensagem WhatsApp'")
             notes = [r[0] for r in records]
-            self.assertEqual(len(notes), 3)
+            self.assertEqual(len(notes) - count_before, 3)
             self.assertTrue(all('Comunicado de teste' not in note for note in notes))
 
     def test_evolution_snapshot_and_disable_future_notifications(self):
