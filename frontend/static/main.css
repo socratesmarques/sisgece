@@ -424,6 +424,22 @@ output:not(:empty),
   z-index: 3;
   border: 1px solid #92b8a0;
 }
+#pedido-status {
+  grid-column: 1 / -1;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+#pedido-status:not(:empty) {
+  padding: 0.8rem 1rem;
+  background: #e7f3e5;
+  border: 1px solid #92b8a0;
+  border-radius: 0.6rem;
+}
+#pedido-status[data-state="error"]:not(:empty) {
+  color: #7b2f26;
+  background: #fff0ec;
+  border-color: #e6b3aa;
+}
 #entrada {
   max-width: 31rem;
   margin: clamp(1rem, 7vh, 5rem) auto;
@@ -587,6 +603,10 @@ footer b {
   }
 }
 @media (max-width: 520px) {
+  #pedido > button[type="submit"] {
+    width: 100%;
+    min-height: 3.15rem;
+  }
   nav {
     width: 100%;
     justify-content: space-between;

@@ -133,7 +133,49 @@ with sync_playwright() as pw:
         expect(page.locator("#familia")).to_be_hidden()
         assert consult_via_api(page, code)["status"] == "PENDENTE"
         assert page.locator("#rastrear").count() == 0
+        expect(page.locator("#pedido-status")).to_be_empty()
+        expect(form.locator("#enviar-pedido")).to_be_enabled()
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        if width == 390:
+            button = form.locator("#enviar-pedido")
+            assert button.evaluate(
+                "el => Math.abs(el.getBoundingClientRect().width - el.form.getBoundingClientRect().width) < 2"
+            ), "Botão de envio não ocupa a largura do formulário no celular"
+
+            # Teste isolado: mantém a resposta pendente para checar feedback e evitar envio duplicado.
+            page.evaluate("""() => {
+                const originalFetch = window.fetch.bind(window);
+                window.fetch = (resource, options) => {
+                    if (resource === "/api/solicitar") {
+                        return new Promise(resolve => { window.resolveSolicitacaoTeste = resolve; });
+                    }
+                    return originalFetch(resource, options);
+                };
+            }""")
+            form.locator("[name=origem]").select_option("Responsável")
+            for key, value in values.items():
+                if key == "parentesco":
+                    form.locator(f"[name={key}]").select_option(value)
+                else:
+                    form.locator(f"[name={key}]").fill(value)
+            button.click()
+            expect(button).to_be_disabled()
+            expect(button).to_have_text("Enviando solicitação…")
+            expect(form).to_have_attribute("aria-busy", "true")
+            status = page.locator("#pedido-status")
+            expect(status).to_have_text("Enviando solicitação…")
+            page.evaluate("""() => window.resolveSolicitacaoTeste({
+                ok: false,
+                json: async () => ({erro: "Serviço temporariamente indisponível."})
+            })""")
+            expect(status).to_contain_text("Serviço temporariamente indisponível.")
+            expect(status).to_have_attribute("data-state", "error")
+            expect(status).to_be_focused()
+            expect(button).to_be_enabled()
+            expect(button).to_have_text("Enviar solicitação")
+            assert form.get_attribute("aria-busy") is None
+            expect(form.locator("[name=aluno]")).to_have_value(values["aluno"])
+            expect(page.locator("#recibo")).to_be_empty()
         page.close()
     browser.close()
     print("Máscaras de CPF/telefone, parentesco, envio e acompanhamento aprovados em 1280 e 390 px.")
