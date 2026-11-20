@@ -95,6 +95,8 @@ with sync_playwright() as pw:
     for width, role in [(1280, "Aluno"), (390, "Responsável")]:
         page = browser.new_page(viewport={"width": width, "height": 844})
         page.goto(url)
+        scripts = page.locator("script[src]").evaluate_all("nodes => nodes.map(el => new URL(el.src).pathname)")
+        assert scripts == ["/static/shared.js", "/static/public.js"], scripts
         # Hero logo must decode successfully on desktop and mobile without third-party requests.
         logo = page.locator(".ifce-identity img")
         expect(logo).to_be_visible()
@@ -207,6 +209,8 @@ with sync_playwright() as pw:
     for width, role in zip((1280, 390, 390), roles):
         page = browser.new_page(viewport={"width": width, "height": 844})
         page.goto(url + "/equipe")
+        scripts = page.locator("script[src]").evaluate_all("nodes => nodes.map(el => new URL(el.src).pathname)")
+        assert scripts == ["/static/shared.js", "/static/staff.js"], scripts
         page.get_by_label("Usuário", exact=True).first.fill(
             str(roles.index(role)) + suffix
         )
