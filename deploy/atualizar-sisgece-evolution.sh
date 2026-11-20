@@ -67,6 +67,8 @@ done
 [[ -z "$(git -C "$REPO" status --porcelain)" ]] || {
   echo "O checkout tem alterações locais. Preserve-as antes de atualizar." >&2; exit 1;
 }
+# A Evolution chama o webhook do SISGECE por uma rede privada adicional.
+docker network inspect sisgece-feedback-net >/dev/null
 docker inspect "$APP" >/dev/null
 docker inspect "$DB" >/dev/null
 docker inspect "$WORKER" >/dev/null
@@ -173,6 +175,9 @@ docker run -d --name "$APP" --network sisgece-net \
   --security-opt no-new-privileges \
   --env-file "$APP_ENV" -p 127.0.0.1:18081:3000 "$NEW_IMAGE"
 STAGE=new
+
+# Conecta antes do healthcheck: se falhar, o rollback recupera o app antigo.
+docker network connect sisgece-feedback-net "$APP"
 
 HEALTHY=false
 for attempt in $(seq 1 30); do
