@@ -17,7 +17,7 @@
 </div>
 {% else %}
 <section id="entrada"><div class="login-symbol" aria-hidden="true">↗</div><h1>Acesso de funcionários</h1><p>Entre com sua conta institucional do SISGECE.</p><form id="login">{{campo('usuario','Usuário','text',64,'autocomplete="username" autocapitalize="none"')}}{{campo('senha','Senha','password',512)}}<button>Entrar</button></form></section>
-<div id="painel" hidden><div class="workspace"><div><p id="perfil"></p><h1>Área da equipe</h1></div><button id="sair">Sair</button></div><nav id="areas" class="areas" aria-label="Seções da equipe" hidden><button id="ver-pedidos" aria-pressed="true">Solicitações</button><button id="ver-historico" aria-pressed="false">Histórico</button><button hidden id="ver-equipe" aria-pressed="false">Funcionários</button></nav><div id="area-pedidos"><section><h2>Solicitações</h2><form id="filtro"><label>Protocolo, matrícula ou nome<input name="q"></label><label>Data solicitada<input type="date" name="data"></label><label>Situação<select name="status"><option value="">Todas</option><option>RECEBIDA</option><option>PENDENTE</option><option>APROVADA</option><option>REPROVADA</option></select></label><button>Buscar solicitações</button></form><div id="lista"></div></section><section id="detalhe" hidden></section><section id="avaliacoes-painel" hidden><div class="directory-head"><div><h2>Avaliações do SISGECE</h2><p>Resultados agregados da pesquisa opcional por WhatsApp, sem identificação dos participantes.</p></div><button type="button" id="atualizar-avaliacoes">Atualizar avaliações</button></div><div id="avaliacoes-resumo" aria-live="polite"></div></section>
+<div id="painel" hidden><div class="workspace"><div><p id="perfil"></p><h1>Área da equipe</h1></div><button id="sair">Sair</button></div><nav id="areas" class="areas" aria-label="Seções da equipe" hidden><button id="ver-pedidos" aria-pressed="true">Solicitações</button><button id="ver-historico" aria-pressed="false">Histórico</button><button hidden id="ver-equipe" aria-pressed="false">Funcionários</button><button hidden id="ver-mensagens" aria-pressed="false">Mensagens automáticas</button></nav><div id="area-pedidos"><section><h2>Solicitações</h2><form id="filtro"><label>Protocolo, matrícula ou nome<input name="q"></label><label>Data solicitada<input type="date" name="data"></label><label>Situação<select name="status"><option value="">Todas</option><option>RECEBIDA</option><option>PENDENTE</option><option>APROVADA</option><option>REPROVADA</option></select></label><button>Buscar solicitações</button></form><div id="lista"></div></section><section id="detalhe" hidden></section><section id="avaliacoes-painel" hidden><div class="directory-head"><div><h2>Avaliações do SISGECE</h2><p>Resultados agregados da pesquisa opcional por WhatsApp, sem identificação dos participantes.</p></div><button type="button" id="atualizar-avaliacoes">Atualizar avaliações</button></div><div id="avaliacoes-resumo" aria-live="polite"></div></section>
 </div><section id="historico-pedidos" hidden><h2>Histórico de solicitações</h2><p>Ações em ordem de registro, no horário de Fortaleza.</p><form id="buscar-historico"><label>Protocolo, matrícula ou nome<input name="q" type="search"></label><button>Buscar no histórico</button></form><div id="eventos-pedidos"></div></section><section id="admin" hidden>
 <div class="directory-head"><div><h2>Funcionários</h2><p>Gerencie quem pode acessar o SISGECE.</p></div><button id="adicionar">Adicionar funcionário</button></div>
 <form id="buscar-equipe"><label>Buscar por nome ou usuário<input type="search" name="q"></label><button>Buscar</button></form>
@@ -29,6 +29,64 @@
 <label><span id="rotulo-senha"></span><input type="password" name="senha" minlength="8" autocomplete="new-password"><small id="ajuda-senha"></small></label>
 <label id="estado-conta"><input type="checkbox" name="ativo" checked> Permitir acesso ao sistema<small>Desmarque para desativar o acesso e preservar o histórico.</small></label>
 <div class="editor-actions"><button type="button" id="cancelar">Cancelar</button><button id="salvar"></button></div></form></dialog>
+</section>
+<section id="mensagens-painel" hidden aria-labelledby="mensagens-heading">
+  <div class="directory-head message-heading">
+    <div>
+      <p class="message-eyebrow">COMUNICAÇÃO · EVOLUTION API</p>
+      <h2 id="mensagens-heading">Mensagens automáticas</h2>
+      <p>Personalize os avisos enviados às famílias em cada etapa do atendimento.</p>
+    </div>
+    <span class="message-restricted">Acesso do superusuário</span>
+  </div>
+  <div class="message-layout">
+    <aside class="message-sidebar" aria-label="Eventos de notificação">
+      <div class="message-sidebar-title"><strong>Etapas do processo</strong><small>8 mensagens disponíveis</small></div>
+      <div id="mensagens-lista" class="message-list"></div>
+    </aside>
+    <div class="message-editor">
+      <div class="message-editor-head">
+        <div>
+          <small>EDITANDO MENSAGEM</small>
+          <h3 id="mensagens-titulo">Selecione um evento</h3>
+          <p id="mensagens-subtitulo">As alterações afetam apenas notificações criadas depois de salvar.</p>
+        </div>
+        <span id="mensagens-situacao" class="message-pill"></span>
+      </div>
+      <form id="mensagens-form">
+        <label for="mensagens-texto">Conteúdo da mensagem
+          <textarea id="mensagens-texto" name="texto" rows="8" minlength="10" maxlength="1500" required spellcheck="true"></textarea>
+        </label>
+        <div class="message-character"><span>Marcadores permitidos: <code>{tipo}</code> <code>{data}</code> <code>{horario}</code></span><span id="mensagens-contador">0 / 1500</span></div>
+        <label class="message-toggle" for="mensagens-ativo">
+          <input id="mensagens-ativo" type="checkbox" checked>
+          <span><strong>Mensagem ativada</strong><small>Desativar impede novos avisos desta etapa; envios já na fila não são cancelados.</small></span>
+        </label>
+        <p id="mensagens-feedback" class="message-feedback" role="status" aria-live="polite"></p>
+        <div class="message-actions">
+          <button id="mensagens-salvar" type="submit">Salvar alterações</button>
+          <button id="mensagens-restaurar" type="button" class="message-button-secondary">Restaurar padrão</button>
+        </div>
+      </form>
+      <div class="message-preview-section">
+        <div class="message-preview-heading">
+          <div><h3>Pré-visualização</h3><small>Exemplo demonstrativo; nenhuma mensagem é enviada.</small></div>
+          <label for="mensagens-movimentacao">Simular
+            <select id="mensagens-movimentacao"><option>Entrada</option><option>Saída</option></select>
+          </label>
+        </div>
+        <div class="message-phone">
+          <div class="message-phone-top"><span class="message-phone-avatar">S</span><span><strong>SISGECE</strong><small>WhatsApp · exemplo</small></span></div>
+          <div class="message-phone-chat"><div id="mensagens-previsao" class="message-chat-bubble">Selecione um evento para visualizar.</div></div>
+        </div>
+        <small id="mensagens-previsao-estado" class="message-preview-help" aria-live="polite"></small>
+      </div>
+      <details class="message-history">
+        <summary>Histórico de edições</summary>
+        <div id="mensagens-historico"><p>Nenhuma alteração registrada.</p></div>
+      </details>
+    </div>
+  </div>
 </section></div>
 {% endif %}</main><footer class="site-footer">
   <div class="site-footer__content">
