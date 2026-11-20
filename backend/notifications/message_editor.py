@@ -68,7 +68,7 @@ def register(app, db, staff, event):
     def preview_message_model():
         payload = request.json
         action = payload.get('tipo')
-        if action not in TEMPLATES:
+        if not isinstance(action, str) or action not in TEMPLATES:
             abort(400, 'Evento inválido.')
         try:
             body = validate_body(payload.get('texto'))
@@ -89,7 +89,7 @@ def register(app, db, staff, event):
     @staff('superusuário')
     def message_model_history():
         action = request.args.get('tipo')
-        if action not in TEMPLATES:
+        if not isinstance(action, str) or action not in TEMPLATES:
             abort(400, 'Evento inválido.')
         rows = db().execute('''SELECT h.versao, h.corpo, h.ativo, h.acao, h.quando,
                 a.nome AS autor
@@ -110,7 +110,7 @@ def register(app, db, staff, event):
     def save_message_model():
         payload = request.json
         action = payload.get('tipo')
-        if action not in TEMPLATES:
+        if not isinstance(action, str) or action not in TEMPLATES:
             abort(400, 'Evento inválido.')
         version = payload.get('versao')
         if type(version) is not int or version < 0:
