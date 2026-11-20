@@ -156,7 +156,7 @@ trap 'restore_on_error 143' TERM
 if [[ "$WORKER_RUNNING" == true ]]; then
   (
     cd "$EVO_DIR"
-    docker compose -p "$PROJECT" -f "$COMPOSE" stop sisgece-notifications
+    SISGECE_IMAGE="$OLD_IMAGE" docker compose -p "$PROJECT" -f "$COMPOSE" stop sisgece-notifications
   )
   WORKER_STOPPED=true
 fi
