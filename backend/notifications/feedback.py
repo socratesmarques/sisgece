@@ -13,6 +13,33 @@ PATH = '/api/notificacoes/evolution/avaliacao'
 RATING = re.compile(r'AVALIAR ([A-F0-9]{16}) ([1-5])')
 
 
+PHONE_JID = re.compile(r'[1-9][0-9]{7,14}@s\.whatsapp\.net')
+LID_JID = re.compile(r'[1-9][0-9]{7,20}@lid')
+
+
+def sender_phone(key):
+    """Resolve o número do remetente Evolution quando remoteJid é @lid.
+
+    remoteJidAlt só é usado quando remoteJid é um LID individual.
+    Sem um número real válido, a nota não pode ser vinculada ao pedido.
+    """
+    jid = key.get('remoteJid')
+    if not isinstance(jid, str):
+        return None
+    if PHONE_JID.fullmatch(jid):
+        phone_jid = jid
+    elif LID_JID.fullmatch(jid):
+        phone_jid = key.get('remoteJidAlt')
+        if not isinstance(phone_jid, str) or not PHONE_JID.fullmatch(phone_jid):
+            return None
+    else:
+        return None
+    try:
+        return normalize_phone('+' + phone_jid.split('@', 1)[0])
+    except ValueError:
+        return None
+
+
 def extract_rating(payload):
     """Ignora saídas próprias, grupos, mídia e qualquer texto fora do comando."""
     if not isinstance(payload, dict) or payload.get('event') != 'messages.upsert':
@@ -25,11 +52,9 @@ def extract_rating(payload):
     key = data.get('key')
     if not isinstance(key, dict) or key.get('fromMe') is not False:
         return None
-    jid = key.get('remoteJid')
+    phone = sender_phone(key)
     mid = key.get('id')
-    if not isinstance(jid, str) or not re.fullmatch(r'[1-9][0-9]{7,14}@s\.whatsapp\.net', jid):
-        return None
-    if not isinstance(mid, str) or not 1 <= len(mid) <= 512:
+    if phone is None or not isinstance(mid, str) or not 1 <= len(mid) <= 512:
         return None
     message = data.get('message')
     if not isinstance(message, dict):
@@ -64,10 +89,6 @@ def extract_rating(payload):
         return None
     matched = RATING.fullmatch(body.strip().upper())
     if not matched:
-        return None
-    try:
-        phone = normalize_phone('+' + jid.split('@', 1)[0])
-    except ValueError:
         return None
     return phone, matched.group(1), int(matched.group(2)), hashlib.sha256(mid.encode()).hexdigest()
 
