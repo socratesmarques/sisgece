@@ -90,7 +90,7 @@ class MessageEditor(unittest.TestCase):
         self.assertEqual(result.status_code, 200)
         self.assertEqual(len(result.json['itens']), 8)
         self.assertEqual(result.json['marcadores'], ['tipo', 'data', 'horario',
-                'detalhes_etapa', 'detalhes_solicitacao', 'convite_avaliacao'])
+                'detalhes_etapa', 'detalhes_solicitacao'])
         self.assertTrue(all(row['versao'] == 0 and row['ativo'] for row in result.json['itens']))
         self.assertTrue(all(row['texto'].startswith('*SISGECE') for row in result.json['itens']))
         self.assertTrue(all('mensagem automática' in row['texto'] for row in result.json['itens']))
@@ -104,20 +104,11 @@ class MessageEditor(unittest.TestCase):
         self.assertNotIn('SISGECE', msg)  # Sem cabeçalho/rodapé implícitos.
         with_details = self.post(self.admin, 'notificacoes/modelos/prever', {
             'tipo': 'recepção',
-            'texto': 'Recepção: {detalhes_etapa}\n\n{convite_avaliacao}',
+            'texto': 'Recepção: {detalhes_etapa}',
             'movimentacao': 'Entrada',
-            'simular_avaliacao': True,
         })
         self.assertEqual(with_details.status_code, 200)
         self.assertIn('entrada foi concluída na recepção', with_details.json['texto'])
-        self.assertIn('AVALIAR 1234567890ABCDEF 5', with_details.json['texto'])
-        without_invite = self.post(self.admin, 'notificacoes/modelos/prever', {
-            'tipo': 'recepção',
-            'texto': 'Recepção: {detalhes_etapa}\n\n{convite_avaliacao}',
-            'movimentacao': 'Saída',
-            'simular_avaliacao': True,
-        })
-        self.assertNotIn('AVALIAR', without_invite.json['texto'])
         self.assertEqual(self.post(self.admin, 'notificacoes/modelos/prever', {
             'tipo':'recepção', 'texto':'Simulação de {tipo}.', 'movimentacao':'Indefinida',
         }).status_code, 400)

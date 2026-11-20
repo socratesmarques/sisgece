@@ -31,20 +31,13 @@ class InstitutionalMessages(unittest.TestCase):
                 self.assertNotIn('portal.exemplo.org', text)
                 self.assertNotIn('Para acompanhar o andamento', text)
 
-    def test_optional_feedback_prompt_only_for_terminal_notice(self):
+    def test_removed_rating_never_appears_in_notifications(self):
         data = {'avaliacao_codigo': '1234567890ABCDEF'}
-        self.assertIn('AVALIAR 1234567890ABCDEF 5',
-                      message_text('portaria', {**data, 'solicitacao_tipo': 'Saída'}))
-        self.assertNotIn('AVALIAR', message_text('reprovar', data))
-        self.assertNotIn('AVALIAR',
-                         message_text('portaria', {**data, 'solicitacao_tipo': 'Entrada'}))
-        self.assertIn('AVALIAR 1234567890ABCDEF 5',
-                      message_text('recepção', {**data, 'solicitacao_tipo': 'Entrada'}))
-        self.assertNotIn('AVALIAR',
-                         message_text('recepção', {**data, 'solicitacao_tipo': 'Saída'}))
-        for action in ('cadastro', 'aprovar', 'corrigir recepção'):
+        for action in TEMPLATES:
             self.assertNotIn('AVALIAR', message_text(action, data))
-        self.assertNotIn('AVALIAR', message_text('reprovar', {'avaliacao_codigo': 'invalid'}))
+        from backend.notifications.outbox import render_full_message
+        rendered = render_full_message('portaria', 'Concluído. {convite_avaliacao}', data)
+        self.assertEqual(rendered, 'Concluído.')
 
     def test_reception_message_distinguishes_entry_from_exit(self):
         entrada = message_text('recepção', {'solicitacao_tipo': 'Entrada'})
