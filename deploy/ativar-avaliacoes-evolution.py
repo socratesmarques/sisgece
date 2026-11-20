@@ -295,11 +295,13 @@ def enable():
     try:
         configure_override(backup)
         print("1/4 Rede persistente e backups preparados.", flush=True)
+        # Marca a intenção ANTES dos comandos: se Docker parar o serviço
+        # e devolver erro, a recuperação ainda tentará reiniciá-lo.
+        worker_was_stopped = True
         action(*worker_compose(), "stop", "sisgece-notifications",
                env=compose_env)
-        worker_was_stopped = True
-        action("docker", "stop", APP)
         old_app_stopped = True
+        action("docker", "stop", APP)
         action("docker", "rename", APP, previous)
         old_app_renamed = True
 
