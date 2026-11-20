@@ -144,7 +144,7 @@ def register(app, db, staff, event):
             body, enabled = full_template(action), True
         else:
             try:
-                body = validate_body(payload.get('texto'))
+                body = validate_body(payload.get('texto'), action)
             except ValueError as error:
                 abort(400, str(error))
             enabled = payload.get('ativo')
