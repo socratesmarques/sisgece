@@ -95,6 +95,11 @@ with sync_playwright() as pw:
     for width, role in [(1280, "Aluno"), (390, "Responsável")]:
         page = browser.new_page(viewport={"width": width, "height": 844})
         page.goto(url)
+        # Hero logo must decode successfully on desktop and mobile without third-party requests.
+        logo = page.locator(".ifce-identity img")
+        expect(logo).to_be_visible()
+        assert logo.evaluate("el => el.complete && el.naturalWidth === 768 && el.naturalHeight === 765"), "Marca IFCE não carregou"
+        assert logo.get_attribute("src").startswith("/static/img/ifce-logo."), "Marca IFCE ainda depende de servidor externo"
         form = page.locator("#pedido")
         check_input_formatting(page)
         form.locator("[name=origem]").select_option(role)
