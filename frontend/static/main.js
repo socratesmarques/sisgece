@@ -150,18 +150,29 @@ if ($("pedido")) {
       location.reload();
     });
   bind("filtro", () => list());
-  const sections = {pedidos:"area-pedidos",historico:"historico-pedidos",equipe:"admin"};
+  const sections = {pedidos:"area-pedidos",historico:"historico-pedidos",equipe:"admin",mensagens:"mensagens-painel"};
   for (const [area,panel] of Object.entries(sections)) {
     $("ver-"+area).onclick = () => run(async () => {
+      if ($("ver-mensagens").getAttribute("aria-pressed") === "true" &&
+          area !== "mensagens" && messageIsDirty() &&
+          !window.confirm("Descartar alterações não salvas da mensagem?")) return;
       for (const [key,id] of Object.entries(sections)) {
         $(id).hidden = key !== area;
         $("ver-"+key).setAttribute("aria-pressed", String(key === area));
       }
       if (area === "equipe") await accounts();
       if (area === "historico") await requestHistory();
+      if (area === "mensagens") await loadMessageModels();
     });
   }
   bind("buscar-historico", () => requestHistory());
+  $("mensagens-form").onsubmit = e => {e.preventDefault(); run(saveMessageModel);};
+  $("mensagens-restaurar").onclick = () => {
+    if (window.confirm("Restaurar o texto original e reativar este aviso?")) run(restoreMessageModel);
+  };
+  $("mensagens-texto").addEventListener("input", () => {updateMessageDirty(); scheduleMessagePreview();});
+  $("mensagens-ativo").onchange = updateMessageDirty;
+  $("mensagens-movimentacao").onchange = scheduleMessagePreview;
   $("adicionar").onclick = () => editAccount();
   $("cancelar").onclick = () => $("editor").close();
   $("conta").elements.perfil.onchange = roleHelp;
@@ -199,6 +210,7 @@ if ($("pedido")) {
     await list();
     $("areas").hidden = false;
     $("ver-equipe").hidden = user.perfil !== "superusuário";
+    $("ver-mensagens").hidden = user.perfil !== "superusuário";
     if (user.perfil === "coordenação" || user.perfil === "superusuário") {
       $("avaliacoes-painel").hidden = false;
       $("atualizar-avaliacoes").onclick = () => run(loadRatings);
@@ -483,5 +495,142 @@ async function loadRatings() {
     }
   } catch (_) {
     node(target, "p", "Não foi possível carregar as avaliações.");
+  }
+}
+
+let messageModels = [];
+let selectedMessage = null;
+let messagePreviewTimer = null;
+let messagePreviewVersion = 0;
+
+function selectedMessageModel() {
+  return messageModels.find(item => item.tipo === selectedMessage);
+}
+function messageIsDirty() {
+  const item = selectedMessageModel();
+  return Boolean(item && ($("mensagens-texto").value.trim() !== item.texto ||
+    $("mensagens-ativo").checked !== item.ativo));
+}
+function updateMessageDirty() {
+  if (!selectedMessageModel()) return;
+  const enabled = $("mensagens-ativo").checked;
+  $("mensagens-contador").textContent = $("mensagens-texto").value.length + " / 1500";
+  $("mensagens-salvar").disabled = !messageIsDirty();
+  $("mensagens-feedback").textContent = messageIsDirty() ? "Alterações ainda não salvas." : "";
+  $("mensagens-situacao").textContent = enabled ? "Ativa" : "Desativada";
+  $("mensagens-situacao").classList.toggle("message-pill-off", !enabled);
+}
+function drawMessageList() {
+  const target = $("mensagens-lista");
+  target.replaceChildren();
+  for (const item of messageModels) {
+    const entry = node(target, "button");
+    entry.type = "button";
+    entry.className = "message-event";
+    entry.setAttribute("aria-pressed", String(item.tipo === selectedMessage));
+    const main = node(entry, "span");
+    node(main, "strong", item.titulo);
+    node(main, "small", item.personalizado ? "Personalizada" : "Texto padrão");
+    node(entry, "span", item.ativo ? "Ativa" : "Pausada").className =
+      "message-event-state" + (item.ativo ? "" : " message-event-off");
+    entry.onclick = () => {
+      if (item.tipo === selectedMessage) return;
+      if (messageIsDirty() && !window.confirm("Descartar alterações não salvas da mensagem?")) return;
+      run(() => selectMessageModel(item.tipo));
+    };
+  }
+}
+async function selectMessageModel(type) {
+  const item = messageModels.find(entry => entry.tipo === type);
+  if (!item) return;
+  selectedMessage = type;
+  $("mensagens-titulo").textContent = item.titulo;
+  $("mensagens-texto").value = item.texto;
+  $("mensagens-ativo").checked = item.ativo;
+  $("mensagens-restaurar").disabled = !item.personalizado && item.ativo;
+  $("mensagens-subtitulo").textContent =
+    "Alterações aplicadas aos próximos eventos. Mensagens na fila mantêm a versão anterior.";
+  drawMessageList();
+  updateMessageDirty();
+  scheduleMessagePreview();
+  await loadMessageHistory(type);
+}
+async function loadMessageModels(type = selectedMessage) {
+  const result = await api("notificacoes/modelos");
+  messageModels = result.itens;
+  await selectMessageModel(messageModels.some(i => i.tipo === type) ?
+    type : messageModels[0]?.tipo);
+}
+function scheduleMessagePreview() {
+  window.clearTimeout(messagePreviewTimer);
+  const revision = ++messagePreviewVersion, type = selectedMessage;
+  if (!type) return;
+  $("mensagens-previsao-estado").textContent = "Atualizando prévia…";
+  messagePreviewTimer = window.setTimeout(async () => {
+    try {
+      const response = await api("notificacoes/modelos/prever", {
+        tipo: type, texto: $("mensagens-texto").value,
+        movimentacao: $("mensagens-movimentacao").value,
+      });
+      if (revision !== messagePreviewVersion) return;
+      $("mensagens-previsao").textContent = response.texto;
+      $("mensagens-previsao-estado").textContent = "Prévia ilustrativa · não enviada";
+    } catch (error) {
+      if (revision !== messagePreviewVersion) return;
+      $("mensagens-previsao").textContent = "Corrija o conteúdo para visualizar a mensagem.";
+      $("mensagens-previsao-estado").textContent = error.message;
+    }
+  }, 300);
+}
+async function saveMessageModel() {
+  const item = selectedMessageModel();
+  if (!item || !messageIsDirty()) return;
+  try {
+    await api("notificacoes/modelos", {
+      tipo: item.tipo, texto: $("mensagens-texto").value,
+      ativo: $("mensagens-ativo").checked, versao: item.versao, acao: "salvar",
+    });
+    await loadMessageModels(item.tipo);
+    $("mensagens-feedback").textContent = "Mensagem salva. Novos eventos usarão esta configuração.";
+  } catch (error) {
+    $("mensagens-feedback").textContent = error.message;
+    throw error;
+  }
+}
+async function restoreMessageModel() {
+  const item = selectedMessageModel();
+  if (!item) return;
+  try {
+    await api("notificacoes/modelos", {tipo:item.tipo, versao:item.versao, acao:"restaurar"});
+    await loadMessageModels(item.tipo);
+    $("mensagens-feedback").textContent = "Texto padrão restaurado e aviso reativado.";
+  } catch (error) {
+    $("mensagens-feedback").textContent = error.message;
+    throw error;
+  }
+}
+async function loadMessageHistory(type) {
+  const target = $("mensagens-historico");
+  target.replaceChildren();
+  try {
+    const result = await api("notificacoes/modelos/historico?tipo=" + encodeURIComponent(type));
+    if (selectedMessage !== type) return;
+    if (!result.itens.length) {
+      node(target, "p", "Este aviso ainda utiliza a configuração original.");
+      return;
+    }
+    for (const item of result.itens) {
+      const details = node(target, "details");
+      details.className = "message-history-entry";
+      const summary = node(details, "summary");
+      node(summary, "strong", "Versão " + item.versao);
+      node(summary, "span", (item.acao === "restaurar" ? "Restaurada" : "Alterada") +
+        " · " + (item.ativo ? "Ativa" : "Pausada"));
+      node(details, "small", item.autor + " · " +
+        new Date(item.quando).toLocaleString("pt-BR", {dateStyle:"short",timeStyle:"short"}));
+      node(details, "pre", item.texto);
+    }
+  } catch (_) {
+    if (selectedMessage === type) node(target, "p", "Não foi possível carregar o histórico.");
   }
 }

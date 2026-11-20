@@ -16,6 +16,7 @@ from psycopg.types.json import Jsonb
 from backend.notifications.webhooks import register as register_webhook
 from backend.notifications.feedback import register as register_evolution_feedback
 from backend.notifications.outbox import enqueue
+from backend.notifications.message_editor import register as register_message_editor
 from backend.notifications.config import CONSENT_VERSION, CONSENT_TEXT, automatic_notifications_enabled
 from backend.notifications.phone import normalize_phone
 from backend.notifications.consent import subscribe
@@ -619,3 +620,5 @@ register_notifications(app, db, query, value, limit, staff)
 register_webhook(app, db)
 
 register_evolution_feedback(app, db, staff)
+
+register_message_editor(app, db, staff, event)
