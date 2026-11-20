@@ -38,7 +38,6 @@ if ($("login")) {
   $("mensagens-texto").addEventListener("input", () => {updateMessageDirty(); scheduleMessagePreview();});
   $("mensagens-ativo").onchange = updateMessageDirty;
   $("mensagens-movimentacao").onchange = scheduleMessagePreview;
-  $("mensagens-simular-avaliacao").onchange = scheduleMessagePreview;
   for (const control of document.querySelectorAll("[data-message-token]")) {
     control.onclick = () => insertMessageToken(control.dataset.messageToken);
   }
@@ -80,11 +79,6 @@ if ($("login")) {
     $("areas").hidden = false;
     $("ver-equipe").hidden = user.perfil !== "superusuário";
     $("ver-mensagens").hidden = user.perfil !== "superusuário";
-    if (user.perfil === "coordenação" || user.perfil === "superusuário") {
-      $("avaliacoes-painel").hidden = false;
-      $("atualizar-avaliacoes").onclick = () => run(loadRatings);
-      await loadRatings();
-    }
   });
 }
 async function list(page = 1) {
@@ -347,26 +341,6 @@ async function requestHistory(page = 1) {
   pager(el,page,r.mais,requestHistory);
 }
 
-async function loadRatings() {
-  const target = $("avaliacoes-resumo");
-  if (!target) return;
-  target.replaceChildren();
-  try {
-    const stats = await api("notificacoes/avaliacoes/estatisticas");
-    node(target, "p", stats.quantidade
-      ? "Total de avaliações: " + stats.quantidade + " · Média: " + stats.media + " de 5"
-      : "Ainda não há avaliações registradas.");
-    if (stats.quantidade) {
-      const scores = Object.entries(stats.distribuicao)
-        .map(([score, count]) => score + " estrela(s): " + count)
-        .join(" · ");
-      node(target, "small", scores);
-    }
-  } catch (_) {
-    node(target, "p", "Não foi possível carregar as avaliações.");
-  }
-}
-
 let messageModels = [];
 let selectedMessage = null;
 let messagePreviewTimer = null;
@@ -387,13 +361,9 @@ function updateMessageTokens() {
   const allowed = new Set(["tipo", "data", "horario"]);
   if (kind === "aprovar") allowed.add("detalhes_solicitacao");
   if (kind === "recepção") allowed.add("detalhes_etapa");
-  if (["reprovar", "recepção", "portaria"].includes(kind)) allowed.add("convite_avaliacao");
   for (const control of document.querySelectorAll("[data-message-token]")) {
     control.hidden = !allowed.has(control.dataset.messageToken);
   }
-  $("mensagens-simular-avaliacao").checked = false;
-  $("mensagens-simular-avaliacao").closest("label").hidden =
-    !allowed.has("convite_avaliacao");
 }
 
 function selectedMessageModel() {
@@ -465,7 +435,6 @@ function scheduleMessagePreview() {
       const response = await api("notificacoes/modelos/prever", {
         tipo: type, texto: $("mensagens-texto").value,
         movimentacao: $("mensagens-movimentacao").value,
-        simular_avaliacao: $("mensagens-simular-avaliacao").checked,
       });
       if (revision !== messagePreviewVersion) return;
       $("mensagens-previsao").textContent = response.texto;
