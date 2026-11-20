@@ -657,7 +657,8 @@ async function loadMessageHistory(type) {
       node(summary, "span", (item.acao === "restaurar" ? "Restaurada" : "Alterada") +
         " · " + (item.ativo ? "Ativa" : "Pausada"));
       node(details, "small", item.autor + " · " +
-        new Date(item.quando).toLocaleString("pt-BR", {dateStyle:"short",timeStyle:"short"}));
+        new Date(item.quando).toLocaleString("pt-BR", {dateStyle:"short",timeStyle:"short"}) +
+        (item.completa ? " · Texto integral" : " · Texto do formato anterior"));
       node(details, "pre", item.texto);
     }
   } catch (_) {
