@@ -102,15 +102,6 @@ def prepare(row):
             conn.execute('UPDATE notificacao_ritmo SET disponivel_em=clock_timestamp()+make_interval(secs=>%s) WHERE chave=%s',(seconds,key))
         conn.execute('''UPDATE notificacoes SET despacho_em=clock_timestamp(),tentativas=tentativas+1
             WHERE id=%s''',(row['id'],))
-        row['avaliacao_codigo'] = None
-        if row['provedor'] == 'evolution' and os.getenv('EVOLUTION_FEEDBACK_ENABLED') == '1':
-            feedback = conn.execute('''SELECT f.codigo FROM notificacao_avaliacoes f
-                JOIN notificacao_assinaturas a ON a.id=f.assinatura
-                WHERE f.notificacao=%s AND f.nota IS NULL AND f.cancelado_em IS NULL
-                  AND f.expira_em>clock_timestamp() AND a.avaliacao_consentida
-                  AND a.revogado_em IS NULL''', (row['id'],)).fetchone()
-            if feedback:
-                row['avaliacao_codigo'] = feedback['codigo']
         return True
 
 

@@ -11,7 +11,7 @@ from flask import abort, g, request
 from .outbox import TEMPLATES, full_template, message_text
 
 TOKENS = ('tipo', 'data', 'horario', 'detalhes_etapa',
-          'detalhes_solicitacao', 'convite_avaliacao')
+          'detalhes_solicitacao')
 
 
 def valid_tokens(action):
@@ -20,8 +20,6 @@ def valid_tokens(action):
         tokens.add('detalhes_solicitacao')
     if action == 'recepção':
         tokens.add('detalhes_etapa')
-    if action in ('recepção', 'portaria'):
-        tokens.add('convite_avaliacao')
     return tokens
 TITLES = {
     'cadastro': 'Solicitação recebida',
@@ -58,6 +56,9 @@ def current_model(conn, action):
         FROM notificacao_modelos WHERE tipo=%s''', (action,)).fetchone()
     full_text = (row['corpo'] if row and row['mensagem_completa'] else
                  full_template(action, row['corpo']) if row else full_template(action))
+    # Templates personalizados antigos podem conter o marcador removido.
+    # Não exibi-lo no editor; o envio também o trata como texto vazio.
+    full_text = full_text.replace('{convite_avaliacao}', '').strip()
     return {
         'tipo': action,
         'titulo': TITLES[action],
@@ -93,12 +94,8 @@ def register(app, db, staff, event):
         movement = payload.get('movimentacao', 'Entrada')
         if movement not in ('Entrada', 'Saída'):
             abort(400, 'Movimentação inválida.')
-        simulate_feedback = payload.get('simular_avaliacao', False)
-        if type(simulate_feedback) is not bool:
-            abort(400, 'Opção de simulação inválida.')
         sample = {
             'mensagem_completa': True,
-            'avaliacao_codigo': '1234567890ABCDEF' if simulate_feedback else None,
             'corpo_personalizado': body,
             'solicitacao_tipo': movement,
             'solicitacao_data': date(2030, 1, 21),

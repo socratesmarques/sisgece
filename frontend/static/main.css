@@ -836,6 +836,6 @@ footer b {
 .message-insert-tools button:hover{background:#daeddf}
 .message-preview-controls{display:flex;align-items:center;flex-wrap:wrap;gap:1rem}
 .message-preview-controls>label{min-width:8.4rem}
-.message-preview-controls .message-preview-feedback{display:flex;align-items:center;gap:.35rem;font-weight:550;font-size:.81rem}
-.message-preview-feedback input[type="checkbox"]{margin:0;flex:none;min-height:0}
+
+
 @media(max-width:520px){.message-preview-controls{width:100%}.message-preview-controls>label:first-child{flex:1 1 100%}.message-insert-tools>span{flex-basis:100%}}
