@@ -33,8 +33,11 @@ class InstitutionalMessages(unittest.TestCase):
 
     def test_optional_feedback_prompt_only_for_terminal_notice(self):
         data = {'avaliacao_codigo': '1234567890ABCDEF'}
-        for action in ('reprovar', 'portaria'):
-            self.assertIn('AVALIAR 1234567890ABCDEF 5', message_text(action, data))
+        self.assertIn('AVALIAR 1234567890ABCDEF 5',
+                      message_text('portaria', {**data, 'solicitacao_tipo': 'Saída'}))
+        self.assertNotIn('AVALIAR', message_text('reprovar', data))
+        self.assertNotIn('AVALIAR',
+                         message_text('portaria', {**data, 'solicitacao_tipo': 'Entrada'}))
         self.assertIn('AVALIAR 1234567890ABCDEF 5',
                       message_text('recepção', {**data, 'solicitacao_tipo': 'Entrada'}))
         self.assertNotIn('AVALIAR',

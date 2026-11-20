@@ -266,7 +266,8 @@ class MessageEditor(unittest.TestCase):
         self.assertNotIn('portaria para solicitações de saída', entry)
         no_invite = render_full_message('reprovar', 'Resultado: {convite_avaliacao}',
                                         {'avaliacao_codigo':'1234567890ABCDEF'})
-        self.assertIn('AVALIAR 1234567890ABCDEF 5', no_invite)
+        self.assertEqual(no_invite, 'Resultado:')
+        self.assertNotIn('{convite_avaliacao}', full_template('reprovar'))
         malformed = render_full_message('reprovar', 'Resultado: {convite_avaliacao}',
                                          {'avaliacao_codigo':'invalid'})
         self.assertEqual(malformed, 'Resultado:')

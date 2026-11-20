@@ -20,7 +20,7 @@ def valid_tokens(action):
         tokens.add('detalhes_solicitacao')
     if action == 'recepção':
         tokens.add('detalhes_etapa')
-    if action in ('reprovar', 'recepção', 'portaria'):
+    if action in ('recepção', 'portaria'):
         tokens.add('convite_avaliacao')
     return tokens
 TITLES = {

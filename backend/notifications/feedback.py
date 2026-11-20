@@ -1,6 +1,7 @@
 """Webhook de avaliação experimental: recebe exclusivamente notas, nunca conversas."""
 import hashlib
 import hmac
+import json
 import os
 import re
 
@@ -33,10 +34,32 @@ def extract_rating(payload):
     message = data.get('message')
     if not isinstance(message, dict):
         return None
+    # Resposta antiga por texto; lista ou botões trazem o ID da opção clicada.
+    # O ID deve conter o comando completo com código imprevisível do convite.
     body = message.get('conversation')
     if body is None:
         extended = message.get('extendedTextMessage')
         body = extended.get('text') if isinstance(extended, dict) else None
+    if body is None:
+        listed = message.get('listResponseMessage')
+        choice = listed.get('singleSelectReply') if isinstance(listed, dict) else None
+        body = choice.get('selectedRowId') if isinstance(choice, dict) else None
+    if body is None:
+        buttons = message.get('buttonsResponseMessage')
+        body = buttons.get('selectedButtonId') if isinstance(buttons, dict) else None
+    if body is None:
+        template = message.get('templateButtonReplyMessage')
+        body = template.get('selectedId') if isinstance(template, dict) else None
+    if body is None:
+        interactive = message.get('interactiveResponseMessage')
+        native = interactive.get('nativeFlowResponseMessage') if isinstance(interactive, dict) else None
+        raw = native.get('paramsJson') if isinstance(native, dict) else None
+        if isinstance(raw, str) and len(raw) <= 1024:
+            try:
+                parsed = json.loads(raw)
+            except (ValueError, TypeError):
+                parsed = None
+            body = parsed.get('id') if isinstance(parsed, dict) else None
     if not isinstance(body, str) or len(body) > 80:
         return None
     matched = RATING.fullmatch(body.strip().upper())
@@ -64,8 +87,7 @@ def consume(conn, payload):
         AND n.provedor='evolution' AND n.estado='sent'
         AND s.declarado->>'telefone'=%s
         AND (
-            (n.template_tipo='reprovar' AND s.status='REPROVADA')
-            OR (n.template_tipo='recepção' AND s.tipo='Entrada' AND s.status='APROVADA'
+            (n.template_tipo='recepção' AND s.tipo='Entrada' AND s.status='APROVADA'
                 AND s.etapa='entrada concluída')
             OR (n.template_tipo='portaria' AND s.tipo='Saída' AND s.status='APROVADA'
                 AND s.etapa='saída concluída')

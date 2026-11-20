@@ -37,6 +37,41 @@ class RatingParser(unittest.TestCase):
                 self.assertIsNone(extract_rating(value))
             self.assertIsNone(extract_rating({'event':'messages.upsert'}))
 
+    def test_list_and_native_flow_answers(self):
+        with patch.dict(os.environ, CONFIG):
+            command = 'AVALIAR 0123456789ABCDEF 3'
+            for message in (
+                {'listResponseMessage': {'singleSelectReply': {'selectedRowId': command}}},
+                {'interactiveResponseMessage': {'nativeFlowResponseMessage':
+                    {'paramsJson': '{"id":"AVALIAR 0123456789ABCDEF 3"}'}}},
+                {'buttonsResponseMessage': {'selectedButtonId': command}},
+                {'templateButtonReplyMessage': {'selectedId': command}},
+            ):
+                with self.subTest(message=message):
+                    item = payload(None)
+                    item['data']['message'] = message
+                    self.assertEqual(extract_rating(item)[:3],
+                                     ('+5585987654321', '0123456789ABCDEF', 3))
+
+    def test_reject_malicious_interactive_ids(self):
+        with patch.dict(os.environ, CONFIG):
+            for message in (
+                {'listResponseMessage': {'singleSelectReply': {'selectedRowId': 'NOTA 5'}}},
+                {'listResponseMessage': {'singleSelectReply': {'selectedRowId': 'AVALIAR 0123456789ABCDEF 6'}}},
+                {'listResponseMessage': {'singleSelectReply': {'selectedRowId': 4}}},
+                {'interactiveResponseMessage': {'nativeFlowResponseMessage': {'paramsJson': 'bad-json'}}},
+                {'interactiveResponseMessage': {'nativeFlowResponseMessage': {'paramsJson': '["AVALIAR 0123456789ABCDEF 4"]'}}},
+                {'interactiveResponseMessage': {'nativeFlowResponseMessage': {'paramsJson': '{"id":"AVALIAR 0123456789ABCDEF 4","extra":"' + 'X' * 1024 + '"}'}}},
+            ):
+                with self.subTest(message=message):
+                    item = payload(None)
+                    item['data']['message'] = message
+                    self.assertIsNone(extract_rating(item))
+            item = payload(None, mine=True)
+            item['data']['message'] = {'listResponseMessage': {'singleSelectReply': {
+                'selectedRowId': 'AVALIAR 0123456789ABCDEF 5'}}}
+            self.assertIsNone(extract_rating(item))
+
 
 if __name__ == '__main__':
     unittest.main()
