@@ -51,13 +51,19 @@ def query(sql, args=()):
 def finish(response):
     if "db" in g and response.status_code < 400:
         g.db.commit()
+    # Only public static files may be cached; pages and APIs carry personal data.
+    cache_control = "no-store"
+    if request.endpoint == "static":
+        cache_control = "public, max-age=0, must-revalidate"
+        if request.path == "/static/img/ifce-logo.374f13b.png":
+            cache_control = "public, max-age=31536000, immutable"
     response.headers.update(
         {
-            "Cache-Control": "no-store",
+            "Cache-Control": cache_control,
             "X-Content-Type-Options": "nosniff",
             "X-Frame-Options": "DENY",
             "Referrer-Policy": "no-referrer",
-            "Content-Security-Policy": "default-src 'self'; img-src 'self' https://acervo.ifce.edu.br; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+            "Content-Security-Policy": "default-src 'self'; img-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
         }
     )
     if not LOCAL:
