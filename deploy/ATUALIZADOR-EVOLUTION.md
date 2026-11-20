@@ -42,6 +42,25 @@ bash ~/atualizar-sisgece.sh --apply
 6. Aguarda `/api/ready` e troca a imagem do worker, preservando se estava ativo ou parado.
 7. Em erro, tenta restaurar o contêiner anterior e o worker antigo. **Não restaura automaticamente o banco**: alterações de esquema podem exigir análise e restauração manual.
 
+## Rede privada do webhook de avaliações
+
+O modo de avaliações interativas usa a rede Docker externa
+`sisgece-feedback-net`. O atualizador oficial confirma que ela existe
+e conecta o novo `sisgece-app` à rede antes do healthcheck. Isso evita
+perder a integração após um `--apply` que troca a imagem.
+
+A Evolution deve manter sua rede padrão e também integrar a rede de
+feedback. O script de ativação `deploy/ativar-avaliacoes-evolution.py`
+prepara `~/evolution-sisgece/compose.override.yaml`, sem reiniciar
+a Evolution. Em recriações da Evolution **com arquivos `-f` explícitos**,
+inclua também `-f compose.override.yaml`; se executar
+`docker compose up` sem `-f`, o Compose descobre o override padrão.
+
+Para a ativação no servidor, veja
+[Ativar avaliações interativas](ATIVACAO-AVALIACOES.md).
+A ativação é independente de `--apply`: o atualizador existente
+não recria contêineres quando a imagem em produção já é a mais recente.
+
 ## Cuidados
 
 - A rotina mantém `WHATSAPP_REAL_SEND_ENABLED=1` **somente no worker** e `0` no app web. Não habilita envio se ele tiver sido desativado.
