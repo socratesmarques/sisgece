@@ -18,6 +18,16 @@
 {% else %}
 <section id="entrada"><div class="login-symbol" aria-hidden="true">↗</div><h1>Acesso de funcionários</h1><p>Entre com sua conta institucional do SISGECE.</p><form id="login">{{campo('usuario','Usuário','text',64,'autocomplete="username" autocapitalize="none"')}}{{campo('senha','Senha','password',512)}}<button>Entrar</button></form></section>
 <div id="painel" hidden><div class="workspace"><div><p id="perfil"></p><h1>Área da equipe</h1></div><button id="sair">Sair</button></div><nav id="areas" class="areas" aria-label="Seções da equipe" hidden><button id="ver-pedidos" aria-pressed="true">Solicitações</button><button id="ver-historico" aria-pressed="false">Histórico</button><button hidden id="ver-equipe" aria-pressed="false">Funcionários</button><button hidden id="ver-mensagens" aria-pressed="false">Mensagens automáticas</button></nav><div id="area-pedidos"><section><h2>Solicitações</h2><form id="filtro"><label>Protocolo, matrícula ou nome<input name="q"></label><label>Data solicitada<input type="date" name="data"></label><label>Situação<select name="status"><option value="">Todas</option><option>RECEBIDA</option><option>PENDENTE</option><option>APROVADA</option><option>REPROVADA</option></select></label><button>Buscar solicitações</button></form><div id="lista"></div></section><section id="detalhe" hidden></section>
+<dialog id="excluir-pedido" aria-labelledby="titulo-exclusao" aria-describedby="pedido-a-excluir efeito-exclusao">
+  <h2 id="titulo-exclusao">Excluir solicitação?</h2>
+  <p id="pedido-a-excluir"></p>
+  <p id="efeito-exclusao">A solicitação sairá da lista e a exclusão ficará registrada no histórico.</p>
+  <p id="erro-exclusao" role="alert"></p>
+  <form method="dialog" class="editor-actions">
+    <button value="cancelar" autofocus>Cancelar</button>
+    <button id="confirmar-exclusao" class="confirm-delete" value="excluir">Confirmar exclusão</button>
+  </form>
+</dialog>
 </div><section id="historico-pedidos" hidden><h2>Histórico de solicitações</h2><p>Ações em ordem de registro, no horário de Fortaleza.</p><form id="buscar-historico"><label>Protocolo, matrícula ou nome<input name="q" type="search"></label><button>Buscar no histórico</button></form><div id="eventos-pedidos"></div></section><section id="admin" hidden>
 <div class="directory-head"><div><h2>Funcionários</h2><p>Gerencie quem pode acessar o SISGECE.</p></div><button id="adicionar">Adicionar funcionário</button></div>
 <form id="buscar-equipe"><label>Buscar por nome ou usuário<input type="search" name="q"></label><button>Buscar</button></form>

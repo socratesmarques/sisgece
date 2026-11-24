@@ -18,7 +18,7 @@ from backend.notifications.outbox import enqueue
 from backend.notifications.message_editor import register as register_message_editor
 from backend.notifications.config import CONSENT_VERSION, CONSENT_TEXT, automatic_notifications_enabled
 from backend.notifications.phone import normalize_phone
-from backend.notifications.consent import subscribe
+from backend.notifications.consent import revoke, subscribe
 from backend.notifications.routes import register as register_notifications
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -356,7 +356,8 @@ def requests_list():
     movement = request.args.get("tipo", "")
     return listing(
         """SELECT id,tipo,protocolo,declarado->>'aluno' AS aluno,status,etapa FROM solicitacoes
-        WHERE (protocolo ILIKE %s OR declarado->>'aluno' ILIKE %s OR declarado->>'matricula' ILIKE %s)
+        WHERE excluida_em IS NULL
+        AND (protocolo ILIKE %s OR declarado->>'aluno' ILIKE %s OR declarado->>'matricula' ILIKE %s)
         AND (%s='' OR status=%s) AND (%s='' OR data_solicitada::text=%s)
         AND (%s='' OR tipo=%s)
         AND (%s OR (status='APROVADA' AND (
@@ -377,7 +378,8 @@ def instant(v):
 @staff()
 def details(sid):
     row = query(
-        """SELECT protocolo,declarado,justificativa,data_solicitada::text,horario_solicitado::text,tipo,status,etapa,mensagem FROM solicitacoes WHERE id=%s""",
+        """SELECT protocolo,declarado,justificativa,data_solicitada::text,horario_solicitado::text,tipo,status,etapa,mensagem
+        FROM solicitacoes WHERE id=%s AND excluida_em IS NULL""",
         (sid,),
     ).fetchone()
     if not row:
@@ -433,7 +435,8 @@ def act(sid):
     ):
         abort(403)
     row = query(
-        "SELECT status,etapa,tipo FROM solicitacoes WHERE id=%s FOR UPDATE", (sid,)
+        "SELECT status,etapa,tipo FROM solicitacoes WHERE id=%s AND excluida_em IS NULL FOR UPDATE",
+        (sid,),
     ).fetchone()
     if not row:
         abort(404)
@@ -513,6 +516,19 @@ def act(sid):
     return {"ok": True}
 
 
+@app.post("/api/pedidos/<int:sid>/excluir")
+@staff("coordenação", "superusuário")
+def delete_request(sid):
+    row = query("SELECT excluida_em FROM solicitacoes WHERE id=%s FOR NO KEY UPDATE", (sid,)).fetchone()
+    if not row:
+        abort(404, "Solicitação não encontrada.")
+    if row["excluida_em"] is None:
+        query("UPDATE solicitacoes SET excluida_em=clock_timestamp() WHERE id=%s", (sid,))
+        revoke(db(), sid)
+        event("Solicitação excluída", sid)
+    return {"ok": True}
+
+
 @app.get("/api/contas")
 @staff("superusuário")
 def accounts():
@@ -530,7 +546,7 @@ def request_history():
         e.acao,e.quando,a.nome AS autor FROM eventos e
         JOIN solicitacoes s ON s.id=e.solicitacao
         LEFT JOIN administradores a ON a.id=e.autor
-        WHERE (%s OR (s.status='APROVADA' AND (
+        WHERE (%s OR (s.excluida_em IS NULL AND s.status='APROVADA' AND (
             lower(s.tipo) IN ('saida','saída')
             OR (%s='recepção' AND lower(s.tipo)='entrada'
                 AND s.etapa IN ('aguardando recepção','entrada concluída'))

@@ -10,6 +10,7 @@ from werkzeug.security import generate_password_hash
 
 from backend.app import app, ROLES
 from backend.manage import migrate, ROOT
+from backend.notifications.config import CONSENT_VERSION
 
 
 class Flow(unittest.TestCase):
@@ -68,6 +69,53 @@ class Flow(unittest.TestCase):
         self.assertEqual(attempt(login,16),429)
         self.assertEqual(attempt(dict(login,usuario="user1")),200)
         self.assertEqual(attempt(login,remote="192.0.2.11"),200)
+
+    def test_delete_request_keeps_history_and_cancels_notifications(self):
+        public = app.test_client()
+        matricula = "EXCLUIR-" + secrets.token_hex(5)
+        self.assertEqual(self.post(public, "solicitar", dict(
+            tipo="Saída", origem="Aluno", aluno="Exclusão de teste", matricula=matricula,
+            responsavel="Fictício", telefone="85987654321", data="2030-01-01", hora="12:00",
+            justificativa="Teste", whatsapp_consent=True, whatsapp_consent_version=CONSENT_VERSION,
+        )).status_code, 201)
+        clients = {}
+        for index, role in enumerate(ROLES):
+            clients[role] = app.test_client()
+            self.assertEqual(self.post(clients[role], "login", {
+                "usuario": "user" + str(index), "senha": self.password,
+            }).status_code, 200)
+
+        coordinator = clients["coordenação"]
+        search_path = "/api/pedidos?q=" + matricula
+        history_path = "/api/historico?q=" + matricula
+        sid = coordinator.get(search_path).json["itens"][0]["id"]
+        request_path = f"pedidos/{sid}"
+        delete_path = request_path + "/excluir"
+        self.assertEqual(self.post(coordinator, request_path, {"acao": "aprovar"}).status_code, 200)
+        self.assertEqual(len(clients["recepção"].get(search_path).json["itens"]), 1)
+        self.assertEqual(self.post(public, delete_path, {}).status_code, 401)
+        for role in ("recepção", "portaria"):
+            self.assertEqual(self.post(clients[role], delete_path, {}).status_code, 403)
+        self.assertEqual(coordinator.post("/api/" + delete_path, json={}).status_code, 403)
+        self.assertEqual(coordinator.get("/api/" + request_path).status_code, 200)
+
+        self.assertEqual(self.post(coordinator, delete_path, {}).json, {"ok": True})
+        self.assertEqual(self.post(clients["superusuário"], delete_path, {}).json, {"ok": True})
+        for client in clients.values():
+            self.assertEqual(client.get(search_path).json["itens"], [])
+            self.assertEqual(client.get("/api/" + request_path).status_code, 404)
+        self.assertEqual(self.post(coordinator, request_path, {"acao": "reabrir análise"}).status_code, 404)
+        self.assertEqual(coordinator.get("/api/" + request_path + "/notificacoes").status_code, 404)
+        self.assertEqual(clients["recepção"].get(history_path).json["itens"], [])
+        history = coordinator.get(history_path).json["itens"]
+        self.assertEqual([entry["acao"] for entry in history],
+                         ["Solicitação excluída", "aprovar", "Saída · envio por Aluno"])
+        self.assertEqual(history[0]["autor"], "coordenação")
+        with psycopg.connect() as db:
+            notice = db.execute(
+                "SELECT estado FROM notificacoes WHERE solicitacao=%s AND template_tipo='aprovar'", (sid,)
+            ).fetchone()
+            self.assertEqual(notice, ("cancelled",))
 
     def test_entry_decisions(self):
         public = app.test_client()
