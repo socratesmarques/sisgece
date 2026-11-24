@@ -396,7 +396,7 @@ with sync_playwright() as pw:
             expect(detail).to_contain_text("PENDENTE")
             expect(detail.locator(".facts")).not_to_contain_text("Orientação pública de teste")
             expect(detail.locator("article").filter(has_text="Orientação pública de teste")).to_have_count(1)
-            if action == "aprovar":
+            if action == "reprovar":
                 remove = records.get_by_role("button", name="Excluir solicitação")
                 confirmation = staff.get_by_role("dialog", name="Excluir solicitação?")
                 remove.click()
