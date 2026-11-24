@@ -1,5 +1,6 @@
 """Valida a identidade e os créditos públicos do rodapé LSD sem banco de dados."""
 from pathlib import Path
+import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,8 +13,23 @@ class FooterCredits(unittest.TestCase):
 
         self.assertIn('© 2026 LSD - Laboratório de Sistemas e Dados', footer)
         self.assertIn('Desenvolvido por ', footer)
-        for name in ('Bryan William', 'Mario Gabriel', 'Sócrates Costa', 'Wendel Peterson'):
-            self.assertIn(name, footer)
+        credits = re.search(r'<p>Desenvolvido por (.*?)</p>', footer, re.DOTALL)
+        self.assertIsNotNone(credits)
+        links = re.findall(
+            r'<a href="([^"]+)" target="_blank" rel="noopener noreferrer">([^<]+)</a>',
+            credits.group(1),
+        )
+        self.assertEqual(links, [
+            ('https://github.com/socratesmarques', 'Sócrates Marques'),
+            ('https://github.com/Gabriel-msv', 'Mário Gabriel'),
+            ('https://github.com/wndelix', 'Wendel Peterson'),
+            ('https://github.com/Bryan9895', 'Bryan William'),
+        ])
+        self.assertEqual(credits.group(1).count('<a '), 4)
+        self.assertEqual(
+            re.sub(r'<[^>]+>', '', credits.group(1)),
+            'Sócrates Marques, Mário Gabriel, Wendel Peterson e Bryan William',
+        )
 
         self.assertIn('https://lsd.maranguape.ifce.edu.br/', footer)
         self.assertIn('rel="noopener noreferrer"', footer)
@@ -34,6 +50,8 @@ class FooterCredits(unittest.TestCase):
         self.assertIn('.site-footer__brand img {', css)
         self.assertIn('.site-footer__bottom {', css)
         self.assertIn('.site-footer__bottom p {', css)
+        self.assertIn('.site-footer__bottom a {', css)
+        self.assertIn('.site-footer__bottom a:focus-visible {', css)
         self.assertIn('@media (max-width: 520px)', css)
 
 
