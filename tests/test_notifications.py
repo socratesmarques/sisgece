@@ -78,22 +78,28 @@ class Notifications(unittest.TestCase):
         receipt = self.submit()
         self.assertEqual(receipt.status_code,201)
         sid = self.latest()
-        code = receipt.json
-        token = self.post('notificacoes/confirmar-numero', code).json['mensagem'].split()[1]
+        self.assertEqual(receipt.json, {"ok": True})
         with self.conn() as conn:
+            token, _ = challenge(conn, sid)
             self.assertFalse(confirm(conn,token,'5585987654322','mock'))
             self.assertFalse(confirm(conn,token,'5585987654321','meta'))
             self.assertTrue(confirm(conn,token,'5585987654321','mock'))
             self.assertFalse(confirm(conn,token,'5585987654321','mock'))
-        self.assertEqual(self.post('notificacoes/estado',code).json['estado'],'ativa')
-        self.assertEqual(self.post('notificacoes/revogar',code).status_code,200)
-        self.assertEqual(self.post('notificacoes/estado',code).json['estado'],'revogada')
-        self.assertEqual(self.post('notificacoes/confirmar-numero',code).status_code,409)
-        self.assertEqual(self.post('consulta',code).status_code,200)
+            revoke(conn, sid)
+            revoked = conn.execute(
+                "SELECT revogado_em FROM notificacao_assinaturas WHERE solicitacao=%s", (sid,)
+            ).fetchone()
+            self.assertIsNotNone(revoked['revogado_em'])
+            with self.assertRaises(ValueError):
+                challenge(conn, sid)
 
     def test_no_implicit_consent_and_expiry(self):
         receipt = self.submit(whatsapp_consent=False)
-        self.assertEqual(self.post('notificacoes/estado',receipt.json).json['estado'],'sem autorização')
+        self.assertEqual(receipt.status_code, 201)
+        with self.conn() as conn:
+            self.assertIsNone(conn.execute(
+                "SELECT id FROM notificacao_assinaturas WHERE solicitacao=%s", (self.latest(),)
+            ).fetchone())
         self.submit()
         with self.conn() as conn:
             token, _ = challenge(conn,self.latest())
@@ -126,7 +132,7 @@ class Notifications(unittest.TestCase):
                     self.assertEqual(consent['consentimento_versao'], AUTO_CONTACT_VERSION)
                     self.assertEqual(consent['estado'], 'pending')
                     self.assertTrue(consent['telefone'].startswith('+55'))
-                self.assertEqual(self.post('notificacoes/estado', receipt.json).json['estado'], 'ativa')
+                self.assertEqual(receipt.json, {'ok': True})
             # Limpa fila criada neste teste; nenhum envio externo.
             with self.conn() as conn:
                 conn.execute(
@@ -134,9 +140,11 @@ class Notifications(unittest.TestCase):
                     (created_sids,))
                 conn.execute("TRUNCATE notificacao_ritmo")
 
-    def test_control_security(self):
-        self.assertEqual(self.client.post('/api/notificacoes/revogar',json={}).status_code,403)
-        self.assertEqual(self.post('notificacoes/revogar',{'codigo':'wrong'}).status_code,404)
+    def test_old_public_code_routes_are_unavailable(self):
+        for path in ('consulta', 'notificacoes/estado', 'notificacoes/confirmar-numero',
+                     'notificacoes/revogar'):
+            with self.subTest(path=path):
+                self.assertEqual(self.post(path, {'codigo': 'ABCDE-FG234'}).status_code, 404)
         self.assertEqual(self.client.get('/api/pedidos/1/notificacoes').status_code,401)
 
     def test_outbox_transaction_and_idempotency(self):
@@ -152,7 +160,7 @@ class Notifications(unittest.TestCase):
         with patch('backend.app.enqueue',side_effect=psycopg.OperationalError('test')):
             self.assertEqual(self.submit().status_code,503)
         self.assertEqual(self.latest(),sid)
-        self.assertEqual(self.post('consulta',receipt.json).status_code,200)
+        self.assertEqual(receipt.json, {'ok': True})
 
     def test_authorized_changes_only(self):
         from werkzeug.security import generate_password_hash
@@ -291,7 +299,7 @@ class Notifications(unittest.TestCase):
         self.clear_queue()
         receipt = self.submit()
         sid = self.latest()
-        self.assertEqual(self.post('notificacoes/estado', receipt.json).json['estado'], 'ativa')
+        self.assertEqual(receipt.status_code, 201)
         with self.conn() as conn:
             self.assertIsNone(conn.execute('SELECT verificado_em FROM notificacao_assinaturas WHERE solicitacao=%s',(sid,)).fetchone()['verificado_em'])
         provider = MockProvider()
@@ -334,12 +342,23 @@ class Notifications(unittest.TestCase):
             self.assertEqual(self.webhook(payload,False).status_code,403)
             self.assertEqual(self.webhook(payload).status_code,200)
             self.assertEqual(self.webhook(payload).status_code,200)
-            self.assertEqual(self.post('notificacoes/estado',receipt.json).json['estado'],'ativa')
+            self.assertEqual(receipt.status_code, 201)
+            with self.conn() as conn:
+                state = conn.execute(
+                    'SELECT verificado_em, revogado_em FROM notificacao_assinaturas WHERE solicitacao=%s',
+                    (sid,),
+                ).fetchone()
+                self.assertIsNotNone(state['verificado_em'])
+                self.assertIsNone(state['revogado_em'])
             self.assertEqual(self.client.get('/api/notificacoes/webhook?hub.mode=subscribe&hub.verify_token='+('v'*32)+'&hub.challenge=12345').data,b'12345')
             self.assertEqual(self.client.get('/api/notificacoes/webhook?hub.mode=subscribe&hub.verify_token=wrong').status_code,403)
             payload = self.envelope(messages=[{'id':'stop-1','type':'text','from':'5585987654321','text':{'body':'PARAR'}}])
             self.assertEqual(self.webhook(payload).status_code,200)
-            self.assertEqual(self.post('notificacoes/estado',receipt.json).json['estado'],'revogada')
+            with self.conn() as conn:
+                state = conn.execute(
+                    'SELECT revogado_em FROM notificacao_assinaturas WHERE solicitacao=%s', (sid,)
+                ).fetchone()
+                self.assertIsNotNone(state['revogado_em'])
             self.assertEqual(self.webhook({'object':'whatsapp_business_account','entry':[None]}).status_code,400)
 
     def test_early_out_of_order_delivery(self):

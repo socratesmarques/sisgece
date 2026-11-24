@@ -75,8 +75,7 @@ Referência de execução Docker: porta do host `127.0.0.1:8004` encaminha para 
 
 1. A origem declarada pode ser `Aluno` ou `Responsável`; o formulário solicita nome, matrícula, responsável/filiação, telefone, data, hora, justificativa e tipo de movimentação. Quando a origem é Responsável, há campos de CPF e parentesco.
 2. O backend valida dados e cria uma solicitação com estado inicial `PENDENTE`.
-3. O sistema entrega um código de consulta de **10 caracteres**, apresentado em dois grupos de cinco separados por hífen. A busca é tolerante a minúsculas e hífen opcional para códigos novos; recibos legados seguem a regra antiga.
-4. O segredo é armazenado como hash no banco. Código e dados pessoais não devem entrar em logs ou documentação.
+3. O solicitante recebe a confirmação de cadastro e acompanha o andamento pelo WhatsApp quando habilitado.
 
 ### Decisão institucional
 
@@ -117,7 +116,6 @@ Referência de execução Docker: porta do host `127.0.0.1:8004` encaminha para 
 | GET | `/`, `/equipe` | Formulário público e área do funcionário |
 | GET | `/api/ready` | Readiness com consulta ao esquema do banco |
 | POST | `/api/solicitar` | Criar solicitação |
-| POST | `/api/consulta` | Consultar por código |
 | POST | `/api/login`, `/api/logout` | Sessão do funcionário |
 | GET | `/api/me` | Funcionário autenticado |
 | GET | `/api/pedidos`, `/api/pedidos/<id>` | Listar e detalhar pedidos com permissões |
@@ -164,7 +162,7 @@ A contagem de testes é sensível à branch; não apresentar o total do PR #9 co
 
 ## 9. Notificações WhatsApp — PR #9 (não mesclado)
 
-**Objetivo:** complementar — nunca substituir — a consulta por código, avisando optativamente o telefone cadastrado quando houver criação/mudanças reais de estado.
+**Objetivo:** informar o solicitante pelo WhatsApp sobre a criação do pedido e as mudanças de situação.
 
 **Escopo presente na branch `feat/notificacoes-whatsapp`:**
 

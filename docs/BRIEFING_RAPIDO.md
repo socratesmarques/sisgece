@@ -16,17 +16,17 @@ O **SISGECE — Sistema de Gerenciamento de Entrada e Saída de Estudantes**, do
 
 ## Fluxo funcional atual na `main`
 
-1. Aluno ou responsável declara os dados do pedido de **Entrada** ou **Saída**, incluindo contato e justificativa; recebe um **código de consulta de 10 caracteres**.
+1. Aluno ou responsável declara os dados do pedido de **Entrada** ou **Saída**, incluindo contato e justificativa.
 2. A coordenação ou o superusuário **aprova/reprova** o pedido; a reprovação exige mensagem pública.
 3. Para **Saída aprovada**, a recepção confere a autorização e a portaria registra a saída efetiva, nessa ordem. **Entrada aprovada não significa entrada física registrada**.
-4. O usuário acompanha situação e mensagem com o código; funcionários consultam pedidos, histórico e permissões por perfil.
+4. O usuário recebe atualizações pelo WhatsApp quando habilitado; funcionários consultam pedidos, histórico e permissões por perfil.
 5. Reabertura/correções preservam eventos anteriores e invalidam etapas dependentes quando aplicável.
 
 **Perfis:** `coordenação`, `recepção`, `portaria`, `superusuário`. Ações institucionais exigem autenticação e autorização no backend.
 
 ## Estado de implementação (17/11/2026)
 
-- **`main`:** fluxo de solicitações, consulta por código, análise de entradas/saídas, conferência de saídas, gestão de funcionários, histórico, máscaras de CPF/telefone, migrações até `006.sql`.
+- **`main`:** fluxo de solicitações, notificações pelo WhatsApp, análise de entradas/saídas, conferência de saídas, gestão de funcionários, histórico, máscaras de CPF/telefone, migrações até `006.sql`.
 - **PR #9 aberto e não mesclado:** notificações opcionais via WhatsApp, consentimento/validação de número, fila PostgreSQL, worker, provedor mock e integração configurável com a API da Meta; testes e CI reportados como aprovados. **Não presumir envio real, homologação institucional ou implantação.**
 - **PR #5 encerrado sem merge:** não tratar seus itens como incluídos só por constarem na descrição.
 - **Produção:** há uma instalação institucional discutida separadamente; **versão realmente instalada, DNS, certificados e estado dos contêineres precisam ser verificados no próprio servidor**. Nunca deduzir deploy a partir de PR ou README.

@@ -1,6 +1,6 @@
 # SISGECE · IFCE Campus Maranguape
 
-Sistema de Gerenciamento de Entrada e Saída de Estudantes. O formulário recebe pedidos de entrada e de saída. Entradas e saídas ficam com situação PENDENTE para aprovação ou recusa pela coordenação ou pelo superusuário. A recusa exige uma mensagem ao solicitante. A aprovação de uma entrada não atesta o ingresso físico: a recepção ainda precisa confirmar a entrada, que é concluída nessa etapa, sem passar pela portaria. Para saídas, a recepção confere a autorização e a portaria registra a saída efetiva. Na página inicial, aluno ou responsável informa os dados declarados e recebe uma confirmação de cadastro com orientação de acompanhamento pelo WhatsApp quando o serviço está habilitado. O código de consulta de dez caracteres continua disponível na API para compatibilidade com integrações e solicitações antigas, mas não é exibido na confirmação do site. A consulta pela API aceita letras minúsculas e o hífen é opcional. Para recibos anteriores à migração 003, use o código secreto original, respeitando maiúsculas e minúsculas. O recibo indica que o pedido foi salvo. A coordenação verifica identidade, filiação e autorização pelos procedimentos institucionais antes de decidir.
+Sistema de Gerenciamento de Entrada e Saída de Estudantes. O formulário recebe pedidos de entrada e de saída. Entradas e saídas ficam com situação PENDENTE para aprovação ou recusa pela coordenação ou pelo superusuário. A recusa exige uma mensagem ao solicitante. A aprovação de uma entrada não atesta o ingresso físico: a recepção ainda precisa confirmar a entrada, que é concluída nessa etapa, sem passar pela portaria. Para saídas, a recepção confere a autorização e a portaria registra a saída efetiva. Na página inicial, aluno ou responsável informa os dados declarados e recebe uma confirmação de cadastro com orientação de acompanhamento pelo WhatsApp quando o serviço está habilitado. O acompanhamento público é feito pelo WhatsApp quando o serviço está habilitado. O recibo indica que o pedido foi salvo. A coordenação verifica identidade, filiação e autorização pelos procedimentos institucionais antes de decidir.
 
 Em **Área do funcionário**, a coordenação e o superusuário podem buscar, analisar, escrever mensagem pública e manter observações internas. A recepção confirma as entradas aprovadas (última etapa) e confere as saídas aprovadas. A portaria registra somente a saída efetiva depois da recepção. Cada confirmação identifica o funcionário e o instante no histórico. O superusuário administra contas e análises. As confirmações operacionais exigem o perfil da etapa. Reabrir a análise de uma saída invalida as duas etapas; corrigir a recepção também invalida a portaria. Reabrir a análise de uma entrada invalida sua confirmação na recepção; a coordenação pode corrigir o registro, exigindo nova confirmação. Os eventos anteriores permanecem disponíveis.
 
@@ -107,12 +107,12 @@ python -m playwright install chromium
 python tests/browser.py
 ```
 
-A CI exercita PostgreSQL 17, a imagem Docker e Chromium. O navegador usa apenas arquivos locais ao servidor. Os limites usam janelas de dez minutos no PostgreSQL. Logins corretos não consomem tentativas. Após 15 falhas para o mesmo usuário e origem, novas tentativas dessa combinação são bloqueadas até a janela virar; após 60 falhas da mesma origem, o bloqueio vale para todos os usuários dessa origem. Formulário e consulta têm contadores independentes.
+A CI exercita PostgreSQL 17, a imagem Docker e Chromium. O navegador usa apenas arquivos locais ao servidor. Os limites usam janelas de dez minutos no PostgreSQL. Logins corretos não consomem tentativas. Após 15 falhas para o mesmo usuário e origem, novas tentativas dessa combinação são bloqueadas até a janela virar; após 60 falhas da mesma origem, o bloqueio vale para todos os usuários dessa origem. O formulário tem um contador independente.
 
 ## Notificações opcionais pelo WhatsApp
 
 O SISGECE inclui consentimento específico, envio automático após autorização, revogação,
-fila transacional e worker independente. A consulta pelo código continua igual.
+fila transacional e worker independente.
 O provedor padrão é **mock**, sem rede ou cobrança. Telefones antigos não são
 considerados autorizados. Nenhum envio real ocorre sem habilitação explícita.
 

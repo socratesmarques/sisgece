@@ -316,12 +316,11 @@ def submit():
     movement = request.json.get("tipo", "Saída")
     if movement not in ("Entrada", "Saída"):
         abort(400, "Escolha entrada ou saída.")
-    secret = "".join(secrets.choice("23456789ABCDEFGHJKLMNPQRSTUVWXYZ") for _ in range(10))
     protocol = secrets.token_hex(8).upper()
     sid = query(
-        """INSERT INTO solicitacoes(tipo,status,etapa,declarado,protocolo,segredo,justificativa,data_solicitada,horario_solicitado)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
-        (movement, "PENDENTE", None if movement == "Entrada" else "aguardando", Jsonb(data), protocol, digest(secret), value("justificativa", 2000), dt, tm),
+        """INSERT INTO solicitacoes(tipo,status,etapa,declarado,protocolo,justificativa,data_solicitada,horario_solicitado)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+        (movement, "PENDENTE", None if movement == "Entrada" else "aguardando", Jsonb(data), protocol, value("justificativa", 2000), dt, tm),
     ).fetchone()["id"]
     try:
         subscribe(db(), sid, request.json)
@@ -329,24 +328,7 @@ def submit():
         abort(400, str(error))
     event_id = event(movement+" · envio por " + data["origem"], sid)
     enqueue(db(), sid, event_id, "cadastro")
-    return {"codigo": secret[:5] + "-" + secret[5:]}, 201
-
-
-@app.post("/api/consulta")
-def track():
-    limit("consulta", 40)
-    code = value("codigo", 128)
-    # Old receipts used a case-sensitive 32-character token.
-    normalized = re.sub(r"[\s-]", "", code).upper()
-    if re.fullmatch(r"[2-9A-HJ-NP-Z]{10}", normalized):
-        code = normalized
-    row = query(
-        "SELECT tipo,status,etapa,mensagem FROM solicitacoes WHERE segredo=%s",
-        (digest(code),),
-    ).fetchone()
-    if not row:
-        abort(404, "Código de consulta inválido.")
-    return row
+    return {"ok": True}, 201
 
 
 def page():
@@ -633,7 +615,7 @@ def account():
     return {"ok": True}
 
 
-register_notifications(app, db, query, value, limit, staff)
+register_notifications(app, query, staff)
 
 register_webhook(app, db)
 

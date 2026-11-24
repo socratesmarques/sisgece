@@ -31,17 +31,8 @@ with sync_playwright() as pw:
         expect(receipt).not_to_contain_text('WhatsApp')
         expect(page.locator('#copiar')).to_have_count(0)
         expect(page.locator('#whatsapp-status')).to_have_count(0)
-        code = submitted.value.json()['codigo']
-        expect(receipt).not_to_contain_text(code)
-        response = page.request.post(url+'/api/consulta', data={'codigo':code},
-                                     headers={'X-SISGECE':'1'})
-        assert response.status == 200
-        assert response.json()['status'] == 'PENDENTE'
-        # No mock CI, o modo laboratório automático não é habilitado.
-        state = page.request.post(url+'/api/notificacoes/estado',
-                                  data={'codigo':code}, headers={'X-SISGECE':'1'})
-        assert state.status == 200
-        assert state.json()['estado'] == 'sem autorização'
+        assert submitted.value.status == 201
+        assert submitted.value.json() == {'ok': True}
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         page.close()
     browser.close()
