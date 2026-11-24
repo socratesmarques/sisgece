@@ -285,6 +285,21 @@ with sync_playwright() as pw:
             assert submitted.value.status == 201
             assert submitted.value.json() == {"ok": True}
             staff.locator("#filtro [name=q]").fill(entry["matricula"])
+            records = staff.locator("#lista .record")
+            expect(records.first).to_be_visible()
+            visible_records = records.all_text_contents()
+            assert visible_records
+
+            def unavailable_search(route):
+                route.fulfill(status=502, content_type="text/html", body="<h1>Bad Gateway</h1>")
+
+            staff.route("**/api/pedidos?*", unavailable_search)
+            staff.get_by_role("button", name="Buscar solicitações").click()
+            expect(staff.locator("#aviso")).to_have_text(
+                "O servidor está indisponível. Tente novamente em instantes."
+            )
+            expect(records).to_have_text(visible_records)
+            staff.unroute("**/api/pedidos?*", unavailable_search)
             staff.evaluate("""() => {
                 const originalFetch = window.fetch.bind(window);
                 const gate = new Promise(resolve => { window.releaseList = resolve; });
@@ -294,9 +309,11 @@ with sync_playwright() as pw:
                 };
             }""")
             staff.get_by_role("button", name="Buscar solicitações").click()
-            expect(staff.locator("#lista .record")).to_have_count(0)
+            expect(staff.locator("#aviso")).to_have_text("Aguarde…")
+            expect(records).to_have_text(visible_records)
             staff.evaluate('window.releaseList()')
-            expect(staff.locator("#lista .record")).to_have_count(1)
+            expect(records).to_have_count(1)
+            expect(staff.locator("#aviso")).to_be_empty()
             # Não exibir ações de outro pedido enquanto os detalhes novos carregam.
             staff.evaluate("""() => {
                 const originalFetch = window.fetch.bind(window);

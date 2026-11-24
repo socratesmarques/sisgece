@@ -67,26 +67,27 @@ if ($("login")) {
     $("aviso").textContent = editing ? "Alterações salvas." : "Funcionário adicionado.";
   });
   run(async () => {
-    const response = await fetch("/api/me");
-    const profile = await response.json();
-    if (response.status === 401) return;
-    if (!response.ok) throw Error("Não foi possível carregar o painel.");
-    user = profile;
+    try {
+      user = await api("me");
+    } catch (error) {
+      if (error.status === 401) return;
+      throw error;
+    }
     $("entrada").hidden = true;
     $("painel").hidden = false;
     $("perfil").textContent = "Painel de " + user.perfil + " · " + user.nome;
-    await list();
     $("areas").hidden = false;
     $("ver-equipe").hidden = user.perfil !== "superusuário";
     $("ver-mensagens").hidden = user.perfil !== "superusuário";
+    await list();
   });
 }
 async function list(page = 1) {
   const p = new URLSearchParams(fields($("filtro")));
   p.set("pagina", page);
   const el = $("lista");
-  el.replaceChildren();
   const r = await api("pedidos?" + p);
+  el.replaceChildren();
   if (!r.itens.length) node(el, "p", "Nenhuma solicitação encontrada.");
   for (const item of r.itens) {
     const line = node(el, "article");
@@ -162,8 +163,12 @@ async function detail(id, page = 1) {
   }
   const send = async (acao, extra = {}) => {
     await api("pedidos/" + id, { acao, ...extra });
-    await list();
-    await detail(id);
+    try {
+      await list();
+      await detail(id);
+    } catch (error) {
+      throw Error("Ação registrada, mas o painel não foi atualizado. " + error.message);
+    }
     $("aviso").textContent = "Ação registrada.";
   };
   const isExit = ["saida", "saída"].includes(r.tipo.toLowerCase());

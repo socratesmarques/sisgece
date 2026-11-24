@@ -24,6 +24,17 @@ with sync_playwright() as pw:
                                data='2030-01-01', hora='12:00',
                                justificativa='Teste').items():
             form.locator('[name='+key+']').fill(value)
+        def unavailable_submission(route):
+            route.fulfill(status=503, content_type='text/html', body='<h1>Service unavailable</h1>')
+
+        page.route('**/api/solicitar', unavailable_submission)
+        form.get_by_role('button', name='Enviar solicitação').click()
+        expect(page.locator('#pedido-status')).to_have_text(
+            'O servidor está indisponível. Não foi possível confirmar o envio.'
+        )
+        expect(form.locator('[name=aluno]')).to_have_value('Teste WhatsApp')
+        expect(form.get_by_role('button', name='Enviar solicitação')).to_be_enabled()
+        page.unroute('**/api/solicitar', unavailable_submission)
         with page.expect_response(lambda response: response.url.endswith('/api/solicitar') and response.request.method == 'POST') as submitted:
             form.get_by_role('button', name='Enviar solicitação').click()
         receipt = page.locator('#recibo')

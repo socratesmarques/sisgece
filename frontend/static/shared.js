@@ -25,11 +25,27 @@ async function api(path, body) {
         body: JSON.stringify(body),
       }
     : {};
-  const response = await fetch("/api/" + path, opts);
-  const data = await response.json();
-  if (!response.ok) throw Error(data.erro || "Falha na operação.");
+  const unavailable = body
+    ? "O servidor está indisponível. Não foi possível confirmar o envio."
+    : "O servidor está indisponível. Tente novamente em instantes.";
+  let response;
+  try {
+    response = await fetch("/api/" + path, opts);
+  } catch {
+    throw Error(body
+      ? "A conexão com o servidor falhou. Não foi possível confirmar o envio."
+      : "Não foi possível conectar ao servidor. Verifique a conexão e tente novamente.");
+  }
+  if (response.status >= 500) throw Error(unavailable);
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message = typeof data?.erro === "string" ? data.erro : "Não foi possível concluir a operação.";
+    throw Object.assign(Error(message), { status: response.status });
+  }
+  if (!data || typeof data !== "object") throw Error(unavailable);
   return data;
 }
+
 function bind(id, fn) {
   $(id).onsubmit = (e) => {
     e.preventDefault();
