@@ -2,7 +2,7 @@
 
 ## Escopo e garantias
 
-O recurso complementa a consulta pelo código. Não muda aprovação, reprovação,
+O WhatsApp é o único canal de acompanhamento para solicitantes. Não muda aprovação, reprovação,
 recepção, portaria ou reabertura. Não existe cancelamento institucional de pedido
 no SISGECE; `cancelled` é somente um estado de notificação.
 
@@ -14,7 +14,7 @@ Nos novos cadastros, basta marcar a checkbox:
 “Autorizo o SISGECE a enviar pelo WhatsApp avisos sobre esta solicitação ao telefone informado.”
 O campo continua sendo o telefone de contato do responsável. A autorização v2
 libera o processamento automático pelo worker, sem botão ou desafio no WhatsApp.
-A checkbox começa desmarcada. A consulta pelo código permanece disponível.
+A checkbox começa desmarcada.
 
 Esta alteração foi solicitada explicitamente pelo mantenedor. Não comprova posse
 do número: erros de digitação podem direcionar avisos a terceiros. `verificado_em`
@@ -23,10 +23,10 @@ da ativação real. Autorizações v1 continuam exigindo a confirmação anterio
 números antigos sem consentimento não são habilitados. As ferramentas de desafio
 permanecem apenas para compatibilidade com assinaturas v1.
 
-A revogação pode ser feita após consultar pelo código ou enviando PARAR, SAIR ou
-STOP do telefone cadastrado ao número institucional (remetente validado pelo webhook). Pelo WhatsApp, interrompe
-todas as assinaturas Meta desse telefone. Nenhuma mensagem de resposta é disparada.
-O portal mostra o estado atualizado. Uma autorização revogada não é reativada
+Na integração Meta, a revogação pode ser feita enviando PARAR, SAIR ou STOP
+do telefone cadastrado ao número institucional (remetente validado pelo webhook).
+Isso interrompe todas as assinaturas Meta desse telefone. Nenhuma mensagem de
+resposta é disparada. Uma autorização revogada não é reativada
 automaticamente. Não se pode recolher uma mensagem já despachada.
 
 ## Arquitetura
@@ -70,7 +70,7 @@ Falha assíncrona de entrega fica `failed`, sem reenvio automático.
 **Limite distribuído:** não há garantia de exatamente uma entrega externa se a
 Meta aceitar a mensagem e a resposta se perder. Sem ID externo, o operador deve
 investigar; não associamos eventos por telefone/horário e não oferecemos botão
-para reenviar resultados incertos. A consulta pelo código permanece disponível.
+para reenviar resultados incertos.
 Uma alteração ou revogação depois de autorizado/iniciado o despacho não consegue
 interromper com certeza essa chamada em andamento.
 

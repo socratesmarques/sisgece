@@ -6,17 +6,6 @@ from playwright.sync_api import sync_playwright, expect
 
 url = os.getenv("TEST_URL", "http://127.0.0.1:8004")
 
-def consult_via_api(page, code):
-    response = page.request.post(
-        url + "/api/consulta",
-        headers={"X-SISGECE": "1"},
-        data={"codigo": code},
-    )
-    assert response.status == 200, response.text()
-    return response.json()
-
-
-
 def check_input_formatting(page):
     form = page.locator("#pedido")
     form.locator("[name=origem]").select_option("Responsável")
@@ -123,17 +112,16 @@ with sync_playwright() as pw:
                 form.locator(f"[name={k}]").fill(v)
         with page.expect_response(lambda response: response.url.endswith("/api/solicitar") and response.request.method == "POST") as submitted:
             form.get_by_role("button").click()
-        code = submitted.value.json()["codigo"]
+        assert submitted.value.status == 201
+        assert submitted.value.json() == {"ok": True}
         receipt = page.locator("#recibo")
         expect(receipt).to_contain_text("Solicitação enviada com sucesso!")
-        expect(receipt).not_to_contain_text(code)
         expect(page.locator("#copiar")).to_have_count(0)
         expect(page.locator("#whatsapp-status")).to_have_count(0)
         expect(form.locator("[name=telefone]")).to_have_value("")
         expect(form.locator("[name=cpf]")).to_have_value("")
         expect(form.locator("[name=parentesco]")).to_have_value("")
         expect(page.locator("#familia")).to_be_hidden()
-        assert consult_via_api(page, code)["status"] == "PENDENTE"
         assert page.locator("#rastrear").count() == 0
         expect(page.locator("#pedido-status")).to_be_empty()
         expect(form.locator("#enviar-pedido")).to_be_enabled()
@@ -294,8 +282,8 @@ with sync_playwright() as pw:
             with public.expect_response(lambda response: response.url.endswith("/api/solicitar") and response.request.method == "POST") as submitted:
                 form.get_by_role("button", name="Enviar solicitação").click()
             expect(public.locator("#recibo")).to_contain_text("O pedido será analisado")
-            code = submitted.value.json()["codigo"]
-            assert consult_via_api(public, code)["status"] == "PENDENTE"
+            assert submitted.value.status == 201
+            assert submitted.value.json() == {"ok": True}
             staff.locator("#filtro [name=q]").fill(entry["matricula"])
             staff.evaluate("""() => {
                 const originalFetch = window.fetch.bind(window);
@@ -334,11 +322,7 @@ with sync_playwright() as pw:
             expect(detail).to_contain_text(expected)
             expect(detail.get_by_role("button", name="corrigir recepção")).to_have_count(0)
             expect(detail.get_by_role("button", name="corrigir portaria")).to_have_count(0)
-            result = consult_via_api(public, code)
-            assert result["status"] == expected
-            assert "Orientação pública de teste" in str(result)
-            assert "NOTA INTERNA RESERVADA" not in str(result)
-            assert "null" not in str(result)
+            expect(detail.locator(".facts")).to_contain_text("Orientação pública de teste")
             assert_responsive(public)
             assert_responsive(staff)
             if action == "aprovar":
@@ -366,9 +350,9 @@ with sync_playwright() as pw:
             detail.locator("[name=nota]").fill("Revisar dados de teste")
             detail.get_by_role("button", name="reabrir análise", exact=True).click()
             expect(detail.get_by_role("button", name="aprovar", exact=True)).to_be_visible()
-            result = consult_via_api(public, code)
-            assert result["status"] == "PENDENTE"
-            assert "Orientação pública de teste" not in str(result)
+            expect(detail).to_contain_text("PENDENTE")
+            expect(detail.locator(".facts")).not_to_contain_text("Orientação pública de teste")
+            expect(detail.locator("article").filter(has_text="Orientação pública de teste")).to_have_count(1)
             public.close()
         # O layout anterior tem uma limitação conhecida de largura em 320 px.
         for width in (390, 768, 1024, 1440):

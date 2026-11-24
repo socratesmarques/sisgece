@@ -1,60 +1,12 @@
-import re
-from urllib.parse import quote
-import os
+from flask import abort
 
-from flask import abort, request
-
-from .config import CONSENT_TEXT, CONSENT_VERSION, authorized_without_challenge
-from .consent import challenge, digest, revoke
-from .phone import masked
+from .config import CONSENT_TEXT, CONSENT_VERSION
 
 
-def register(app, db, query, value, limit, staff):
-    def lookup(kind='whatsapp-control', maximum=20):
-        limit(kind, maximum)
-        code = value('codigo', 128)
-        normalized = re.sub(r'[\s-]', '', code).upper()
-        if re.fullmatch(r'[2-9A-HJ-NP-Z]{10}', normalized):
-            code = normalized
-        row = query('SELECT id FROM solicitacoes WHERE segredo=%s', (digest(code),)).fetchone()
-        if not row:
-            abort(404, 'Código de consulta inválido.')
-        return row['id']
-
+def register(app, query, staff):
     @app.get('/api/notificacoes/config')
     def notification_config():
         return {'version': CONSENT_VERSION, 'text': CONSENT_TEXT}
-
-    @app.post('/api/notificacoes/estado')
-    def notification_status():
-        sid = lookup('whatsapp-status', 40)
-        row = query('''SELECT a.destinatario,a.verificado_em,a.revogado_em,a.consentimento_versao,
-            s.declarado->>'telefone' AS telefone FROM notificacao_assinaturas a
-            JOIN solicitacoes s ON s.id=a.solicitacao WHERE a.solicitacao=%s''', (sid,)).fetchone()
-        if not row:
-            return {'estado': 'sem autorização'}
-        return {'estado': 'revogada' if row['revogado_em'] else
-                'ativa' if row['verificado_em'] or authorized_without_challenge(row['consentimento_versao']) else 'aguardando confirmação',
-                'destinatario': row['destinatario'], 'telefone': masked(row['telefone'])}
-
-    @app.post('/api/notificacoes/confirmar-numero')
-    def start_confirmation():
-        sid = lookup()
-        try:
-            token, provider = challenge(db(), sid)
-        except ValueError as error:
-            abort(409, str(error))
-        business_phone = os.getenv('WHATSAPP_BUSINESS_NUMBER', '')
-        if provider == 'meta' and not re.fullmatch(r'[1-9][0-9]{7,14}', business_phone):
-            abort(503, 'Confirmação pelo WhatsApp ainda não configurada pela instituição.')
-        message = 'CONFIRMAR ' + token
-        return {'mensagem': message, 'expira_minutos': 15, 'provedor': provider,
-                'url': 'https://wa.me/' + business_phone + '?text=' + quote(message) if provider == 'meta' else None}
-
-    @app.post('/api/notificacoes/revogar')
-    def revoke_notifications():
-        revoke(db(), lookup())
-        return {'ok': True}
 
     @app.get('/api/pedidos/<int:sid>/notificacoes')
     @staff('coordenação', 'superusuário')

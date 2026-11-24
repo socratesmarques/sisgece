@@ -33,12 +33,10 @@ TEMPLATES = {
         'A decisão anterior deverá ser reavaliada e o andamento poderá sofrer alterações.'),
     'corrigir recepção': ('sisgece_atualizacao',
         'Informamos que houve uma *atualização no registro de conferência da recepção* '
-        'referente à sua solicitação.\n\n'
-        'O histórico e a situação atualizada estão disponíveis para consulta no sistema.'),
+        'referente à sua solicitação.'),
     'corrigir portaria': ('sisgece_atualizacao',
         'Informamos que houve uma *atualização no registro da portaria* referente à sua '
-        'solicitação de saída.\n\n'
-        'O histórico e a situação atualizada estão disponíveis para consulta no sistema.'),
+        'solicitação de saída.'),
 }
 
 
