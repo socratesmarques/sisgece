@@ -32,12 +32,30 @@ Para implantar uma alteração **já integrada à `main`**, durante uma janela d
 bash ~/atualizar-sisgece.sh --apply
 ```
 
+## Reinício dos contêineres
+
+Durante uma janela de manutenção:
+
+```bash
+bash ~/atualizar-sisgece.sh --restart
+```
+
+O comando reinicia o PostgreSQL e o app do SISGECE, os serviços do projeto
+Compose `evolution-sisgece` e o worker. Ele também inicia contêineres desse
+conjunto que estiverem parados, inclusive o worker, que pode voltar a processar
+a fila de notificações. O app passa pela verificação de `/api/ready` antes
+do reinício do worker. As imagens, os volumes e os contêineres de reversão
+do app são preservados. O reinício dispensa o checkout e os arquivos de
+configuração do atualizador. Reinício e atualização usam o mesmo bloqueio
+local (`flock`) para evitar execução simultânea.
+
 ## O que o script faz
 
 1. Confere as redes, porta, contêineres, credenciais de PostgreSQL e os ambientes do app e do worker, sem imprimir segredos.
 2. Faz `git pull --ff-only` e constrói uma nova imagem **antes** de interromper qualquer serviço.
 3. Faz backup do ambiente e interrompe o worker apenas se já estava rodando.
-4. Para o SISGECE, obtém um dump do PostgreSQL e preserva o contêiner antigo com outro nome.
+4. Para o SISGECE, obtém um dump do PostgreSQL, verifica a leitura com
+   `pg_restore` e preserva o contêiner antigo com outro nome.
 5. Inicia a nova imagem usando **`sisgece-prod-evolution.env`**, preservando `NOTIFICATIONS_PROVIDER=evolution`.
 6. Aguarda `/api/ready` e troca a imagem do worker, preservando se estava ativo ou parado.
 7. Em erro, tenta restaurar o contêiner anterior e o worker antigo. **Não restaura automaticamente o banco**: alterações de esquema podem exigir análise e restauração manual.
