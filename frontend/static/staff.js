@@ -1,11 +1,11 @@
 if ($("login")) {
   bind("login", async (body) => {
-    await api("login", body);
+    await api("login", body, confirmsWrite);
     location.reload();
   });
   $("sair").onclick = () =>
     run(async () => {
-      await api("logout", {});
+      await api("logout", {}, confirmsWrite);
       location.reload();
     });
   bind("filtro", () => list());
@@ -55,7 +55,7 @@ if ($("login")) {
     if (editing) body.id = Number(body.id);
     else delete body.id;
     try {
-      await api("contas", body);
+      await api("contas", body, confirmsWrite);
     } catch (error) {
       $("erro-conta").textContent = error.message;
       return;
@@ -68,7 +68,8 @@ if ($("login")) {
   });
   run(async () => {
     try {
-      user = await api("me");
+      user = await api("me", undefined, (profile) =>
+        Number.isInteger(profile.id) && typeof profile.perfil === "string" && typeof profile.nome === "string");
     } catch (error) {
       if (error.status === 401) return;
       throw error;
@@ -86,7 +87,20 @@ async function list(page = 1) {
   const p = new URLSearchParams(fields($("filtro")));
   p.set("pagina", page);
   const el = $("lista");
-  const r = await api("pedidos?" + p);
+  const controls = [$("filtro").querySelector("button"), ...el.querySelectorAll("button")];
+  for (const control of controls) control.disabled = true;
+  el.setAttribute("aria-busy", "true");
+  let r;
+  try {
+    r = await api("pedidos?" + p, undefined, (data) =>
+      Array.isArray(data.itens) && typeof data.mais === "boolean" &&
+      data.itens.every((item) => Number.isInteger(item?.id) &&
+        typeof item.tipo === "string" && typeof item.protocolo === "string" &&
+        typeof item.status === "string"));
+  } finally {
+    el.removeAttribute("aria-busy");
+    for (const control of controls) control.disabled = false;
+  }
   el.replaceChildren();
   if (!r.itens.length) node(el, "p", "Nenhuma solicitação encontrada.");
   for (const item of r.itens) {
@@ -112,8 +126,9 @@ async function detail(id, page = 1) {
   const el = $("detalhe");
   el.hidden = true;
   el.replaceChildren();
-  const r = await api("pedidos/" + id + "?pagina=" + page);
-  el.hidden = false;
+  const r = await api("pedidos/" + id + "?pagina=" + page, undefined, (data) =>
+    typeof data.tipo === "string" && typeof data.status === "string" &&
+    isRecord(data.confirmacoes) && Array.isArray(data.historico?.itens));
   node(el, "h2", "Solicitação " + r.protocolo);
   const labels = {
     aluno: "Estudante",
@@ -162,13 +177,10 @@ async function detail(id, page = 1) {
     }
   }
   const send = async (acao, extra = {}) => {
-    await api("pedidos/" + id, { acao, ...extra });
-    try {
-      await list();
-      await detail(id);
-    } catch (error) {
-      throw Error("Ação registrada, mas o painel não foi atualizado. " + error.message);
-    }
+    await api("pedidos/" + id, { acao, ...extra }, confirmsWrite);
+    const updates = await Promise.allSettled([list(), detail(id)]);
+    if (updates.some((result) => result.status === "rejected"))
+      throw Error("Ação registrada, mas o painel não foi atualizado por completo. Busque a solicitação novamente.");
     $("aviso").textContent = "Ação registrada.";
   };
   const isExit = ["saida", "saída"].includes(r.tipo.toLowerCase());
@@ -264,6 +276,7 @@ async function detail(id, page = 1) {
       [e.quando, e.acao, e.autor, e.nota].filter(Boolean).join(" · "),
     );
   pager(el, page, r.historico.mais, (p) => detail(id, p));
+  el.hidden = false;
   el.scrollIntoView();
 }
 function roleHelp() {
@@ -458,7 +471,7 @@ async function saveMessageModel() {
     await api("notificacoes/modelos", {
       tipo: item.tipo, texto: $("mensagens-texto").value,
       ativo: $("mensagens-ativo").checked, versao: item.versao, acao: "salvar",
-    });
+    }, confirmsWrite);
     await loadMessageModels(item.tipo);
     $("mensagens-feedback").textContent = "Mensagem salva. Novos eventos usarão esta configuração.";
   } catch (error) {
@@ -470,7 +483,7 @@ async function restoreMessageModel() {
   const item = selectedMessageModel();
   if (!item) return;
   try {
-    await api("notificacoes/modelos", {tipo:item.tipo, versao:item.versao, acao:"restaurar"});
+    await api("notificacoes/modelos", {tipo:item.tipo, versao:item.versao, acao:"restaurar"}, confirmsWrite);
     await loadMessageModels(item.tipo);
     $("mensagens-feedback").textContent = "Texto padrão restaurado e aviso reativado.";
   } catch (error) {
