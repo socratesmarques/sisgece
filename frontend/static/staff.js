@@ -103,6 +103,7 @@ async function list(page = 1) {
   }
   el.replaceChildren();
   if (!r.itens.length) node(el, "p", "Nenhuma solicitação encontrada.");
+  const canDelete = ["coordenação", "superusuário"].includes(user.perfil);
   for (const item of r.itens) {
     const line = node(el, "article");
     line.className = "record";
@@ -118,10 +119,75 @@ async function list(page = 1) {
     );
     status.className = "badge";
     status.dataset.status = item.status;
-    button(line, "Abrir detalhes", () => detail(item.id));
+    const actions = node(line, "div");
+    actions.className = "record-actions";
+    button(actions, "Abrir detalhes", () => detail(item.id));
+    if (canDelete) {
+      const remove = node(actions, "button");
+      remove.type = "button";
+      remove.className = "delete-request";
+      remove.setAttribute("aria-label", "Excluir solicitação " + item.protocolo);
+      remove.title = "Excluir solicitação";
+      const icon = node(remove, "span");
+      icon.className = "trash-icon";
+      icon.setAttribute("aria-hidden", "true");
+      remove.onclick = () => confirmDeletion(item, line, page);
+    }
   }
   pager(el, page, r.mais, list);
 }
+
+function confirmDeletion(item, line, page) {
+  if (pending) return;
+  const dialog = $("excluir-pedido");
+  const form = dialog.querySelector("form");
+  const cancel = form.querySelector("[value=cancelar]");
+  const confirm = $("confirmar-exclusao");
+  const error = $("erro-exclusao");
+  $("pedido-a-excluir").textContent = [item.aluno, item.protocolo].filter(Boolean).join(" · ");
+  error.textContent = "";
+  dialog.oncancel = (event) => {
+    if (confirm.disabled) event.preventDefault();
+  };
+  form.onsubmit = (event) => {
+    if (event.submitter !== confirm) return;
+    event.preventDefault();
+    run(async () => {
+      cancel.disabled = confirm.disabled = true;
+      confirm.textContent = "Excluindo…";
+      error.textContent = "";
+      try {
+        await api("pedidos/" + item.id + "/excluir", {}, confirmsWrite);
+      } catch (failure) {
+        error.textContent = failure.status
+          ? failure.message : "Não foi possível confirmar a exclusão. Tente novamente.";
+        cancel.disabled = false;
+        cancel.focus();
+        return;
+      } finally {
+        cancel.disabled = confirm.disabled = false;
+        confirm.textContent = "Confirmar exclusão";
+      }
+      dialog.close();
+      line.remove();
+      const details = $("detalhe");
+      if (details.dataset.requestId === String(item.id)) {
+        details.hidden = true;
+        details.replaceChildren();
+        delete details.dataset.requestId;
+      }
+      try {
+        await list(page);
+      } catch {
+        throw Error("Solicitação excluída, mas não foi possível atualizar a lista. Busque novamente.");
+      }
+      $("aviso").textContent = "Solicitação excluída.";
+      $("aviso").focus();
+    });
+  };
+  dialog.showModal();
+}
+
 async function detail(id, page = 1) {
   const el = $("detalhe");
   el.hidden = true;
@@ -276,6 +342,7 @@ async function detail(id, page = 1) {
       [e.quando, e.acao, e.autor, e.nota].filter(Boolean).join(" · "),
     );
   pager(el, page, r.historico.mais, (p) => detail(id, p));
+  el.dataset.requestId = id;
   el.hidden = false;
   el.scrollIntoView();
 }

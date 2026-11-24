@@ -193,6 +193,15 @@ with psycopg.connect() as db:
             ),
         )
 
+def sign_in(page, username):
+    page.get_by_label("Usuário", exact=True).fill(username)
+    page.get_by_label("Senha", exact=True).fill(password)
+    expect(page.locator("#aviso")).to_be_empty()
+    page.get_by_role("button", name="Entrar", exact=True).click()
+    expect(page.locator("#painel")).to_be_visible()
+    expect(page.locator("#aviso")).to_be_empty()
+
+
 with sync_playwright() as pw:
     browser = pw.chromium.launch(channel=os.getenv("BROWSER_CHANNEL") or None, executable_path=os.getenv("BROWSER_EXECUTABLE") or None)
     for width, role in zip((1280, 390, 390), roles):
@@ -200,13 +209,7 @@ with sync_playwright() as pw:
         page.goto(url + "/equipe")
         scripts = page.locator("script[src]").evaluate_all("nodes => nodes.map(el => new URL(el.src).pathname)")
         assert scripts == ["/static/shared.js", "/static/staff.js"], scripts
-        page.get_by_label("Usuário", exact=True).first.fill(
-            str(roles.index(role)) + suffix
-        )
-        page.get_by_label("Senha", exact=True).fill(password)
-        page.get_by_role("button", name="Entrar").click()
-        expect(page.locator("#painel")).to_be_visible()
-        expect(page.locator("#aviso")).to_be_empty()
+        sign_in(page, str(roles.index(role)) + suffix)
         page.locator("#filtro [name=q]").fill(values["matricula"])
         page.get_by_role("button", name="Buscar solicitações").click()
         expect(page.locator("#aviso")).to_be_empty()
@@ -251,11 +254,7 @@ with sync_playwright() as pw:
     for role, username, width in (("coordenação", "0" + suffix, 1280), ("superusuário", "admin" + suffix, 390)):
         staff = new_page(viewport={"width": width, "height": 844})
         staff.goto(url + "/equipe")
-        staff.get_by_label("Usuário", exact=True).fill(username)
-        staff.get_by_label("Senha", exact=True).fill(password)
-        staff.get_by_role("button", name="Entrar", exact=True).click()
-        expect(staff.locator("#painel")).to_be_visible()
-        expect(staff.locator("#aviso")).to_be_empty()
+        sign_in(staff, username)
         if role == "superusuário":
             staff.get_by_role("button", name="Mensagens automáticas").click()
             expect(staff.locator("#mensagens-painel")).to_be_visible()
@@ -372,15 +371,12 @@ with sync_playwright() as pw:
                 # Entrada aprovada aparece para a recepção, mas não exige portaria.
                 reception = new_page(viewport={"width": width, "height": 844})
                 reception.goto(url + "/equipe")
-                reception.get_by_label("Usuário", exact=True).fill("1" + suffix)
-                reception.get_by_label("Senha", exact=True).fill(password)
-                reception.get_by_role("button", name="Entrar", exact=True).click()
-                expect(reception.locator("#painel")).to_be_visible()
-                expect(reception.locator("#aviso")).to_be_empty()
+                sign_in(reception, "1" + suffix)
                 reception.locator("#filtro [name=q]").fill(entry["matricula"])
                 reception.get_by_role("button", name="Buscar solicitações").click()
                 expect(reception.locator("#aviso")).to_be_empty()
                 expect(reception.locator("#lista .record")).to_have_count(1)
+                expect(reception.get_by_role("button", name="Excluir solicitação")).to_have_count(0)
                 reception.get_by_role("button", name="Abrir detalhes").click()
                 entry_detail = reception.locator("#detalhe")
                 expect(entry_detail).to_contain_text("Conferência da entrada")
@@ -400,6 +396,34 @@ with sync_playwright() as pw:
             expect(detail).to_contain_text("PENDENTE")
             expect(detail.locator(".facts")).not_to_contain_text("Orientação pública de teste")
             expect(detail.locator("article").filter(has_text="Orientação pública de teste")).to_have_count(1)
+            if action == "reprovar":
+                remove = records.get_by_role("button", name="Excluir solicitação")
+                confirmation = staff.get_by_role("dialog", name="Excluir solicitação?")
+                remove.click()
+                expect(confirmation.get_by_role("button", name="Cancelar")).to_be_focused()
+                expect(confirmation).to_contain_text(entry["aluno"])
+                assert_responsive(staff)
+                confirmation.get_by_role("button", name="Cancelar").click()
+                expect(confirmation).to_be_hidden()
+                expect(records).to_have_count(1)
+                expect(detail).to_contain_text("PENDENTE")
+                remove.click()
+                confirm = confirmation.get_by_role("button", name="Confirmar exclusão")
+                delete_url = "**/api/pedidos/*/excluir"
+
+                def unavailable_deletion(route):
+                    route.fulfill(status=503)
+
+                staff.route(delete_url, unavailable_deletion)
+                confirm.click()
+                expect(confirmation.get_by_role("alert")).to_contain_text("confirmar a exclusão")
+                expect(records).to_have_count(1)
+                staff.unroute(delete_url, unavailable_deletion)
+                confirm.click()
+                expect(confirmation).to_be_hidden()
+                expect(staff.locator("#aviso")).to_have_text("Solicitação excluída.")
+                expect(records).to_have_count(0)
+                expect(detail).to_be_hidden()
             public.close()
         # O layout anterior tem uma limitação conhecida de largura em 320 px.
         for width in (390, 768, 1024, 1440):
