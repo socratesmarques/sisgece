@@ -322,7 +322,7 @@ with sync_playwright() as pw:
             expect(detail).to_contain_text(expected)
             expect(detail.get_by_role("button", name="corrigir recepção")).to_have_count(0)
             expect(detail.get_by_role("button", name="corrigir portaria")).to_have_count(0)
-            expect(detail).to_contain_text("Orientação pública de teste")
+            expect(detail.locator(".facts")).to_contain_text("Orientação pública de teste")
             assert_responsive(public)
             assert_responsive(staff)
             if action == "aprovar":
@@ -351,7 +351,8 @@ with sync_playwright() as pw:
             detail.get_by_role("button", name="reabrir análise", exact=True).click()
             expect(detail.get_by_role("button", name="aprovar", exact=True)).to_be_visible()
             expect(detail).to_contain_text("PENDENTE")
-            expect(detail).not_to_contain_text("Orientação pública de teste")
+            expect(detail.locator(".facts")).not_to_contain_text("Orientação pública de teste")
+            expect(detail.locator("article").filter(has_text="Orientação pública de teste")).to_have_count(1)
             public.close()
         # O layout anterior tem uma limitação conhecida de largura em 320 px.
         for width in (390, 768, 1024, 1440):
