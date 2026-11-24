@@ -24,8 +24,27 @@ with sync_playwright() as pw:
                                data='2030-01-01', hora='12:00',
                                justificativa='Teste').items():
             form.locator('[name='+key+']').fill(value)
+
+        def unavailable_submission(route):
+            route.fulfill(status=503, content_type='text/html', body='<h1>Service unavailable</h1>')
+
+        def invalid_receipt(route):
+            route.fulfill(status=201, json={'ok': False})
+
+        submit = form.get_by_role('button', name='Enviar solicitação')
+        for handler, message in (
+            (unavailable_submission, 'O servidor está indisponível. Não foi possível confirmar o envio.'),
+            (invalid_receipt, 'O servidor respondeu de forma inesperada. Não foi possível confirmar o envio.'),
+        ):
+            page.route('**/api/solicitar', handler)
+            submit.click()
+            expect(page.locator('#pedido-status')).to_have_text(message)
+            expect(page.locator('#recibo')).to_be_empty()
+            expect(form.locator('[name=aluno]')).to_have_value('Teste WhatsApp')
+            expect(submit).to_be_enabled()
+            page.unroute('**/api/solicitar', handler)
         with page.expect_response(lambda response: response.url.endswith('/api/solicitar') and response.request.method == 'POST') as submitted:
-            form.get_by_role('button', name='Enviar solicitação').click()
+            submit.click()
         receipt = page.locator('#recibo')
         expect(receipt).to_contain_text('Solicitação enviada com sucesso!')
         expect(receipt).not_to_contain_text('WhatsApp')

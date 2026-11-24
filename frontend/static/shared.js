@@ -1,5 +1,7 @@
 const $ = (id) => document.getElementById(id);
 const fields = (form) => Object.fromEntries(new FormData(form));
+const isRecord = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const confirmsWrite = (data) => data.ok === true;
 let user;
 let pending = false;
 
@@ -17,7 +19,7 @@ async function run(work) {
     pending = false;
   }
 }
-async function api(path, body) {
+async function api(path, body, validate) {
   const opts = body
     ? {
         method: "POST",
@@ -25,11 +27,32 @@ async function api(path, body) {
         body: JSON.stringify(body),
       }
     : {};
-  const response = await fetch("/api/" + path, opts);
-  const data = await response.json();
-  if (!response.ok) throw Error(data.erro || "Falha na operação.");
+  const unavailable = body
+    ? "O servidor está indisponível. Não foi possível confirmar o envio."
+    : "O servidor está indisponível. Tente novamente em instantes.";
+  let response;
+  try {
+    response = await fetch("/api/" + path, opts);
+  } catch {
+    throw Error(body
+      ? "A conexão com o servidor falhou. Não foi possível confirmar o envio."
+      : "Não foi possível conectar ao servidor. Verifique a conexão e tente novamente.");
+  }
+  if (response.status >= 500) throw Error(unavailable);
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message = typeof data?.erro === "string" && data.erro.trim()
+      ? data.erro : "Não foi possível concluir a operação.";
+    throw Object.assign(Error(message), { status: response.status });
+  }
+  if (!isRecord(data) || (validate && !validate(data))) {
+    throw Error(body
+      ? "O servidor respondeu de forma inesperada. Não foi possível confirmar o envio."
+      : "O servidor respondeu de forma inesperada. Tente novamente em instantes.");
+  }
   return data;
 }
+
 function bind(id, fn) {
   $(id).onsubmit = (e) => {
     e.preventDefault();

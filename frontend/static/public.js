@@ -26,7 +26,7 @@ if ($("pedido")) {
     status.textContent = "Enviando solicitação…";
     $("recibo").textContent = "";
     try {
-      await api("solicitar", body);
+      await api("solicitar", body, confirmsWrite);
       $("recibo").textContent =
         "Solicitação enviada com sucesso! O pedido será analisado pela coordenação." +
         (form.dataset.whatsappAuto === "true"

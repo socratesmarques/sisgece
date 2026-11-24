@@ -156,6 +156,7 @@ with sync_playwright() as pw:
             expect(status).to_have_text("Enviando solicitação…")
             page.evaluate("""() => window.resolveSolicitacaoTeste({
                 ok: false,
+                status: 400,
                 json: async () => ({erro: "Serviço temporariamente indisponível."})
             })""")
             expect(status).to_contain_text("Serviço temporariamente indisponível.")
@@ -204,9 +205,14 @@ with sync_playwright() as pw:
         )
         page.get_by_label("Senha", exact=True).fill(password)
         page.get_by_role("button", name="Entrar").click()
+        expect(page.locator("#painel")).to_be_visible()
+        expect(page.locator("#aviso")).to_be_empty()
         page.locator("#filtro [name=q]").fill(values["matricula"])
         page.get_by_role("button", name="Buscar solicitações").click()
-        page.get_by_role("button", name="Abrir detalhes").first.click()
+        expect(page.locator("#aviso")).to_be_empty()
+        details_button = page.get_by_role("button", name="Abrir detalhes")
+        expect(details_button).to_have_count(1)
+        details_button.click()
         if role == "coordenação":
             expect(page.locator("#detalhe")).to_contain_text("(85) 99999-9999")
             expect(page.locator("#detalhe")).to_contain_text("123.456.789-01")
@@ -249,6 +255,7 @@ with sync_playwright() as pw:
         staff.get_by_label("Senha", exact=True).fill(password)
         staff.get_by_role("button", name="Entrar", exact=True).click()
         expect(staff.locator("#painel")).to_be_visible()
+        expect(staff.locator("#aviso")).to_be_empty()
         if role == "superusuário":
             staff.get_by_role("button", name="Mensagens automáticas").click()
             expect(staff.locator("#mensagens-painel")).to_be_visible()
@@ -285,6 +292,28 @@ with sync_playwright() as pw:
             assert submitted.value.status == 201
             assert submitted.value.json() == {"ok": True}
             staff.locator("#filtro [name=q]").fill(entry["matricula"])
+            records = staff.locator("#lista .record")
+            expect(records.first).to_be_visible()
+            visible_records = records.all_text_contents()
+            assert visible_records
+
+            def unavailable_search(route):
+                route.fulfill(status=502, content_type="text/html", body="<h1>Bad Gateway</h1>")
+
+            def invalid_search(route):
+                route.fulfill(status=200, json={"itens": [None], "mais": False})
+
+            search_url = "**/api/pedidos?*"
+            search_button = staff.get_by_role("button", name="Buscar solicitações")
+            for handler, message in (
+                (unavailable_search, "O servidor está indisponível. Tente novamente em instantes."),
+                (invalid_search, "O servidor respondeu de forma inesperada. Tente novamente em instantes."),
+            ):
+                staff.route(search_url, handler)
+                search_button.click()
+                expect(staff.locator("#aviso")).to_have_text(message)
+                expect(records).to_have_text(visible_records)
+                staff.unroute(search_url, handler)
             staff.evaluate("""() => {
                 const originalFetch = window.fetch.bind(window);
                 const gate = new Promise(resolve => { window.releaseList = resolve; });
@@ -293,10 +322,13 @@ with sync_playwright() as pw:
                     return originalFetch(...args);
                 };
             }""")
-            staff.get_by_role("button", name="Buscar solicitações").click()
-            expect(staff.locator("#lista .record")).to_have_count(0)
+            search_button.click()
+            expect(staff.locator("#aviso")).to_have_text("Aguarde…")
+            expect(records).to_have_text(visible_records)
+            expect(records.first.get_by_role("button", name="Abrir detalhes")).to_be_disabled()
             staff.evaluate('window.releaseList()')
-            expect(staff.locator("#lista .record")).to_have_count(1)
+            expect(records).to_have_count(1)
+            expect(staff.locator("#aviso")).to_be_empty()
             # Não exibir ações de outro pedido enquanto os detalhes novos carregam.
             staff.evaluate("""() => {
                 const originalFetch = window.fetch.bind(window);
@@ -317,8 +349,19 @@ with sync_playwright() as pw:
                 expect(detail.get_by_role("button", name="aprovar", exact=True)).to_be_visible()
             detail.locator("[name=mensagem]").fill("Orientação pública de teste")
             detail.locator("[name=nota]").fill("NOTA INTERNA RESERVADA")
+            if action == "aprovar":
+                staff.route(search_url, unavailable_search)
             detail.get_by_role("button", name=action, exact=True).click()
-            expect(staff.locator("#aviso")).to_have_text("Ação registrada.")
+            if action == "aprovar":
+                expect(staff.locator("#aviso")).to_have_text(
+                    "Ação registrada, mas o painel não foi atualizado por completo. "
+                    "Busque a solicitação novamente."
+                )
+                staff.unroute(search_url, unavailable_search)
+                expect(records).to_contain_text(["PENDENTE"])
+                expect(detail.get_by_role("button", name="aprovar", exact=True)).to_have_count(0)
+            else:
+                expect(staff.locator("#aviso")).to_have_text("Ação registrada.")
             expect(detail).to_contain_text(expected)
             expect(detail.get_by_role("button", name="corrigir recepção")).to_have_count(0)
             expect(detail.get_by_role("button", name="corrigir portaria")).to_have_count(0)
@@ -332,8 +375,11 @@ with sync_playwright() as pw:
                 reception.get_by_label("Usuário", exact=True).fill("1" + suffix)
                 reception.get_by_label("Senha", exact=True).fill(password)
                 reception.get_by_role("button", name="Entrar", exact=True).click()
+                expect(reception.locator("#painel")).to_be_visible()
+                expect(reception.locator("#aviso")).to_be_empty()
                 reception.locator("#filtro [name=q]").fill(entry["matricula"])
                 reception.get_by_role("button", name="Buscar solicitações").click()
+                expect(reception.locator("#aviso")).to_be_empty()
                 expect(reception.locator("#lista .record")).to_have_count(1)
                 reception.get_by_role("button", name="Abrir detalhes").click()
                 entry_detail = reception.locator("#detalhe")
@@ -344,7 +390,8 @@ with sync_playwright() as pw:
                 entry_detail.get_by_role("button", name="Registrar confirmação").click()
                 expect(entry_detail).to_contain_text("entrada concluída")
                 reception.close()
-                staff.get_by_role("button", name="Buscar solicitações").click()
+                search_button.click()
+                expect(staff.locator("#aviso")).to_be_empty()
                 staff.get_by_role("button", name="Abrir detalhes").click()
                 expect(detail).to_contain_text("entrada concluída")
             detail.locator("[name=nota]").fill("Revisar dados de teste")
