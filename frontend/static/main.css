@@ -63,9 +63,7 @@ footer,
   text-decoration: none;
   color: var(--ink);
 }
-.mark,
-.seal,
-.login-symbol {
+.seal {
   display: grid;
   place-items: center;
   background: var(--green);
@@ -75,9 +73,9 @@ footer,
   width: 2.5rem;
   height: 2.5rem;
 }
-.brand b {
-  font-size: 1.45rem;
-  letter-spacing: -0.055em;
+.brand-logo {
+  width: clamp(8rem, 23vw, 10rem);
+  height: auto;
 }
 .brand > span {
   border-left: 1px solid var(--line);
@@ -454,6 +452,9 @@ output:not(:empty),
   box-shadow: 0 12px 40px #143d2810;
 }
 .login-symbol {
+  display: block;
+  width: 2.5rem;
+  height: 2.5rem;
   margin-bottom: 1.4rem;
 }
 .workspace {
