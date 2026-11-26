@@ -110,17 +110,19 @@
 </section></div>
 {% endif %}</main><footer class="site-footer">
   <div class="site-footer__content">
-    <a class="site-footer__brand" href="https://lsd.maranguape.ifce.edu.br/" target="_blank" rel="noopener noreferrer" aria-label="Visitar o Laboratório de Sistemas e Dados">
-      <img src="{{ url_for('static', filename='img/lsd-logo.svg') }}" alt="Logotipo do Laboratório de Sistemas e Dados" width="80" height="75" loading="lazy">
-    </a>
-  </div>
-  <div class="site-footer__bottom">
-    <p>© 2026 LSD - Laboratório de Sistemas e Dados</p>
-    <p>Desenvolvido por <a href="https://github.com/socratesmarques" target="_blank" rel="noopener noreferrer">Sócrates Marques</a>, <a href="https://github.com/Gabriel-msv" target="_blank" rel="noopener noreferrer">Mário Gabriel</a>, <a href="https://github.com/wndelix" target="_blank" rel="noopener noreferrer">Wendel Peterson</a> e <a href="https://github.com/Bryan9895" target="_blank" rel="noopener noreferrer">Bryan William</a></p>
-    <button id="neve" class="snow-toggle" type="button" aria-pressed="false" data-module="{{ url_for('static', filename='snow.js', v=assets['snow.js']) }}" hidden>
-      <span class="snow-toggle__icon" aria-hidden="true">❄</span>
-      Efeito de neve
-      <span class="snow-toggle__state" aria-hidden="true">Desativado</span>
-    </button>
+    <div class="site-footer__identity">
+      <a class="site-footer__brand" href="https://lsd.maranguape.ifce.edu.br/" target="_blank" rel="noopener noreferrer" aria-label="Visitar o Laboratório de Sistemas e Dados">
+        <img src="{{ url_for('static', filename='img/lsd-logo.svg') }}" alt="Logotipo do Laboratório de Sistemas e Dados" width="80" height="75" loading="lazy">
+      </a>
+      <p>© 2026 LSD - Laboratório de Sistemas e Dados</p>
+    </div>
+    <div class="site-footer__bottom">
+      <p><strong>Desenvolvido por</strong> <a href="https://github.com/socratesmarques" target="_blank" rel="noopener noreferrer">Sócrates Marques</a>, <a href="https://github.com/Gabriel-msv" target="_blank" rel="noopener noreferrer">Mário Gabriel</a>, <a href="https://github.com/wndelix" target="_blank" rel="noopener noreferrer">Wendel Peterson</a> e <a href="https://github.com/Bryan9895" target="_blank" rel="noopener noreferrer">Bryan William</a></p>
+      <button id="neve" class="snow-toggle" type="button" aria-pressed="false" data-module="{{ url_for('static', filename='snow.js', v=assets['snow.js']) }}" hidden>
+        <span class="snow-toggle__icon" aria-hidden="true">❄</span>
+        Efeito de neve
+        <span class="snow-toggle__state" aria-hidden="true">Desativado</span>
+      </button>
+    </div>
   </div>
 </footer></body></html>

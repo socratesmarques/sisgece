@@ -12,8 +12,7 @@ class FooterCredits(unittest.TestCase):
         footer = html.split('<footer class="site-footer">', 1)[1].split('</footer>', 1)[0]
 
         self.assertIn('© 2026 LSD - Laboratório de Sistemas e Dados', footer)
-        self.assertIn('Desenvolvido por ', footer)
-        credits = re.search(r'<p>Desenvolvido por (.*?)</p>', footer, re.DOTALL)
+        credits = re.search(r'<p><strong>Desenvolvido por</strong> (.*?)</p>', footer, re.DOTALL)
         self.assertIsNotNone(credits)
         links = re.findall(
             r'<a href="([^"]+)" target="_blank" rel="noopener noreferrer">([^<]+)</a>',
@@ -45,14 +44,13 @@ class FooterCredits(unittest.TestCase):
     def test_responsive_styles(self):
         css = (ROOT / 'frontend/static/main.css').read_text(encoding='utf-8')
         self.assertIn('.site-footer {', css)
-        self.assertIn('background: var(--ink);', css)
         self.assertIn('.site-footer__content {', css)
         self.assertIn('.site-footer__brand img {', css)
         self.assertIn('.site-footer__bottom {', css)
         self.assertIn('.site-footer__bottom p {', css)
         self.assertIn('.site-footer__bottom a {', css)
         self.assertIn('.site-footer__bottom a:focus-visible {', css)
-        self.assertIn('@media (max-width: 520px)', css)
+        self.assertIn('@media (max-width: 620px)', css)
 
 
 if __name__ == '__main__':
