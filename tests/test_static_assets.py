@@ -22,7 +22,13 @@ class StaticAssetsTests(unittest.TestCase):
                     self.assertIn(f"/static/{name}?v={STATIC_ASSET_VERSIONS[name]}", html)
                 self.assertNotIn(f"/static/{excluded}", html)
                 self.assertNotIn("/static/main.js", html)
-                self.assertEqual(len(re.findall(r'<script defer src=', html)), 2)
+                for name in ("mascote.css", "mascote.js"):
+                    url = f"/static/{name}?v={STATIC_ASSET_VERSIONS[name]}"
+                    if route == "/":
+                        self.assertIn(url, html)
+                    else:
+                        self.assertNotIn(f"/static/{name}", html)
+                self.assertEqual(len(re.findall(r'<script defer src=', html)), 3 if route == "/" else 2)
 
     def test_only_matching_fingerprints_have_immutable_cache(self):
         for name, version in STATIC_ASSET_VERSIONS.items():

@@ -27,6 +27,23 @@ def check_snow_toggle(page):
     expect(layer).to_have_count(0)
 
 
+def check_mascot(page):
+    mascot = page.locator(".lsd-onda-com-robo")
+    expect(mascot).to_have_attribute("aria-hidden", "true")
+    expect(mascot).to_have_css("pointer-events", "none")
+    mascot.scroll_into_view_if_needed()
+
+    eye = mascot.locator("[data-robo-olho]").first
+    resting = "translate(0.00 -4.00)"
+    expect(eye).to_have_attribute("transform", resting)
+    page.mouse.move(page.viewport_size["width"] - 10, 100)
+    expect(eye).not_to_have_attribute("transform", resting)
+
+    page.emulate_media(reduced_motion="reduce")
+    expect(eye).to_have_attribute("transform", resting)
+    page.emulate_media(reduced_motion="no-preference")
+
+
 def check_input_formatting(page):
     form = page.locator("#pedido")
     form.locator("[name=origem]").select_option("Responsável")
@@ -105,9 +122,10 @@ with sync_playwright() as pw:
     for width, role in [(1280, "Aluno"), (390, "Responsável")]:
         page = browser.new_page(viewport={"width": width, "height": 844})
         page.goto(url)
+        check_mascot(page)
         check_snow_toggle(page)
         scripts = page.locator("script[src]").evaluate_all("nodes => nodes.map(el => new URL(el.src).pathname)")
-        assert scripts == ["/static/shared.js", "/static/public.js"], scripts
+        assert scripts == ["/static/shared.js", "/static/public.js", "/static/mascote.js"], scripts
         # Hero logo must decode successfully on desktop and mobile without third-party requests.
         logo = page.locator(".ifce-identity img")
         expect(logo).to_be_visible()
