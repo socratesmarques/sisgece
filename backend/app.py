@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # Fingerprints do conteúdo evitam cache antigo após uma atualização.
 STATIC_ASSET_VERSIONS = {
     name: hashlib.sha256((ROOT / "frontend/static" / name).read_bytes()).hexdigest()[:12]
-    for name in ("main.css", "shared.js", "public.js", "staff.js", "snow.js")
+    for name in ("main.css", "shared.js", "public.js", "staff.js", "snow.js", "mascote.css", "mascote.js")
 }
 app = Flask(
     __name__,
