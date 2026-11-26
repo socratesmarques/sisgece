@@ -1,4 +1,10 @@
 const $ = (id) => document.getElementById(id);
+const snowToggle = $("neve");
+snowToggle.hidden = false;
+snowToggle.onclick = async () => {
+  const { toggleSnow } = await import(snowToggle.dataset.module);
+  toggleSnow(snowToggle);
+};
 const fields = (form) => Object.fromEntries(new FormData(form));
 const isRecord = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const confirmsWrite = (data) => data.ok === true;

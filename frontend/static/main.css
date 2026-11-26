@@ -771,6 +771,74 @@ footer b {
   outline: 2px solid currentColor;
   outline-offset: 2px;
 }
+.snow-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 1rem;
+  padding: 0.45rem 0.65rem 0.45rem 0.8rem;
+  border: 1px solid #96cac058;
+  border-radius: 2rem;
+  background: #ffffff0b;
+  color: #ebfbfb;
+  font-size: 0.85rem;
+}
+.snow-toggle:hover {
+  background: #ffffff1a;
+}
+.snow-toggle:focus-visible {
+  outline-color: #a9e8ff;
+}
+.snow-toggle__icon {
+  color: #a9e8ff;
+  font: 1.25rem/1 "Segoe UI Symbol", sans-serif;
+}
+.snow-toggle__state {
+  min-width: 5.25rem;
+  padding: 0.16rem 0.48rem;
+  border-radius: 2rem;
+  background: #ffffff14;
+  font-size: 0.75rem;
+}
+.snow-toggle[aria-pressed="true"] {
+  border-color: #a9e8ff;
+}
+.snow-toggle[aria-pressed="true"] .snow-toggle__state {
+  background: #bcecf5;
+  color: #123d37;
+}
+.snowfall {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+.snowfall__flake {
+  position: absolute;
+  top: -1.75rem;
+  left: var(--x);
+  color: #f6fdff;
+  font: var(--size)/1 "Segoe UI Symbol", sans-serif;
+  text-shadow: 0 0 3px #3f8296;
+  opacity: 0.52;
+  animation: snow-fall var(--fall-time) var(--delay) linear infinite;
+}
+.snowfall__flake--near {
+  text-shadow: 0 0 2px #39748a, 0 0 7px #8bd9f5;
+  opacity: 0.82;
+}
+@keyframes snow-fall {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50% { transform: translate3d(var(--drift), calc(50vh + 1rem), 0) rotate(110deg); }
+  100% { transform: translate3d(0, calc(100vh + 2rem), 0) rotate(220deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .snowfall__flake {
+    animation-play-state: paused;
+  }
+}
 @media (max-width: 520px) {
   .site-footer__content {
     padding: 2rem 1rem 1.5rem;
