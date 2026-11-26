@@ -6,6 +6,27 @@ from playwright.sync_api import sync_playwright, expect
 
 url = os.getenv("TEST_URL", "http://127.0.0.1:8004")
 
+def check_snow_toggle(page):
+    toggle = page.get_by_role("contentinfo").get_by_role("button", name="Efeito de neve")
+    layer = page.locator(".snowfall")
+    expect(toggle).to_have_attribute("aria-pressed", "false")
+    expect(layer).to_have_count(0)
+
+    toggle.press("Enter")
+    expect(toggle).to_have_attribute("aria-pressed", "true")
+    expect(layer).to_have_attribute("aria-hidden", "true")
+    expect(layer).to_have_css("pointer-events", "none")
+    flake = layer.locator(".snowfall__flake").first
+    expect(flake).to_have_css("animation-name", "snow-fall")
+
+    page.emulate_media(reduced_motion="reduce")
+    expect(flake).to_have_css("animation-play-state", "paused")
+    page.emulate_media(reduced_motion="no-preference")
+    toggle.click()
+    expect(toggle).to_have_attribute("aria-pressed", "false")
+    expect(layer).to_have_count(0)
+
+
 def check_input_formatting(page):
     form = page.locator("#pedido")
     form.locator("[name=origem]").select_option("Responsável")
@@ -84,6 +105,7 @@ with sync_playwright() as pw:
     for width, role in [(1280, "Aluno"), (390, "Responsável")]:
         page = browser.new_page(viewport={"width": width, "height": 844})
         page.goto(url)
+        check_snow_toggle(page)
         scripts = page.locator("script[src]").evaluate_all("nodes => nodes.map(el => new URL(el.src).pathname)")
         assert scripts == ["/static/shared.js", "/static/public.js"], scripts
         # Hero logo must decode successfully on desktop and mobile without third-party requests.
@@ -207,6 +229,7 @@ with sync_playwright() as pw:
     for width, role in zip((1280, 390, 390), roles):
         page = browser.new_page(viewport={"width": width, "height": 844})
         page.goto(url + "/equipe")
+        check_snow_toggle(page)
         scripts = page.locator("script[src]").evaluate_all("nodes => nodes.map(el => new URL(el.src).pathname)")
         assert scripts == ["/static/shared.js", "/static/staff.js"], scripts
         sign_in(page, str(roles.index(role)) + suffix)
